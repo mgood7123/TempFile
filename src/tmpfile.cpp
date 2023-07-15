@@ -145,22 +145,6 @@ char * strndup (const char *s, size_t n)
 #include <stdlib.h> // free
 #endif
 
-// based on
-// https://github.com/wbx-github/uclibc-ng/blob/master/libc/misc/internals/tempname.c#L166
-
-/* Generate a temporary file name based on TMPL. TMPL must match the
-   rules for mk[s]temp[s] (i.e. end in "prefixXXXXXXsuffix"). The name
-   constructed does not exist at the time of the call to __gen_tempname.
-   TMPL is overwritten with the result.
-   KIND may be one of:
-   __GT_NOCREATE:       simply verify that the name does not exist
-                        at the time of the call. mode argument is ignored.
-   __GT_FILE:           create the file using open(O_CREAT|O_EXCL)
-                        and return a read-write fd with given mode.
-   __GT_BIGFILE:        same as __GT_FILE but use open64().
-   __GT_DIR:            create a directory with given mode.
-*/
-
 bool TempFile::is_handle_valid() {
     return this->fd >= 0 && this->path != nullptr;
 }
@@ -174,6 +158,12 @@ TempFile::TempFile(const char * template_prefix) {
     this->fd = this->invalid_fd;
     this->path = nullptr;
     construct(template_prefix);
+}
+
+TempFile::TempFile(const char * dir, const char * template_prefix) {
+    this->fd = this->invalid_fd;
+    this->path = nullptr;
+    construct(dir, template_prefix);
 }
 
 bool TempFile::construct(const char * template_prefix) {
@@ -205,6 +195,10 @@ bool TempFile::construct(const char * template_prefix) {
 
     // we have cleaned up
 
+    if (template_prefix == nullptr) {
+        return false;
+    }
+
     while (
         this->fd == invalid_fd
         && path == nullptr
@@ -215,6 +209,22 @@ bool TempFile::construct(const char * template_prefix) {
         std::string template_XXXXXX_str = std::string(template_prefix) + "XXXXXX";
 
 #ifdef _WIN32
+
+        // based on
+        // https://github.com/wbx-github/uclibc-ng/blob/master/libc/misc/internals/tempname.c#L166
+
+        /* Generate a temporary file name based on TMPL. TMPL must match the
+        rules for mk[s]temp[s] (i.e. end in "prefixXXXXXXsuffix"). The name
+        constructed does not exist at the time of the call to __gen_tempname.
+        TMPL is overwritten with the result.
+        KIND may be one of:
+        __GT_NOCREATE:       simply verify that the name does not exist
+                                at the time of the call. mode argument is ignored.
+        __GT_FILE:           create the file using open(O_CREAT|O_EXCL)
+                                and return a read-write fd with given mode.
+        __GT_BIGFILE:        same as __GT_FILE but use open64().
+        __GT_DIR:            create a directory with given mode.
+        */
 
         char *XXXXXX;
         unsigned int i;
@@ -322,6 +332,158 @@ bool TempFile::construct(const char * template_prefix) {
             }
         }
         auto t = std::string(tmp_dir) + "/" + template_XXXXXX_str;
+        this->path = strdup(t.c_str());
+        this->fd = mkstemp(this->path);
+        if (this->fd < 0) {
+            free(this->path);
+            this->path = nullptr;
+            if (fd != invalid_fd) {
+                return false;
+            }
+            goto LOOP_END;
+        }
+        return true;
+#endif
+        LOOP_END:
+    }
+    return false;
+}
+
+bool TempFile::construct(const char * dir, const char * template_prefix) {
+    if (dir == nullptr) [
+        return construct(template_prefix);
+    ]
+
+    if (this->is_handle_valid()) {
+        // return true if we are already set-up
+        return true;
+    }
+
+    if (this->fd < 0 || this->path == nullptr) {
+        // if either of these are invalid, we must clean up, we somehow got corrupted
+        if (this->fd >= 0) {
+#ifdef _WIN32
+            CloseHandle(this->fd);
+#else
+            close(this->fd);
+#endif
+        }
+        if (this->path != nullptr) {
+#ifdef _WIN32
+            DeleteFile(this->path);
+            delete[] this->path;
+#else
+            free(this->path);
+#endif
+        }
+        this->fd = this->invalid_fd;
+        this->path = nullptr;
+    }
+
+    // we have cleaned up
+
+    if (template_prefix == nullptr) {
+        return false;
+    }
+    
+    while (
+        this->fd == invalid_fd
+        && path == nullptr
+#ifdef _WIN32
+        && GetLastError() == ERROR_ALREADY_EXISTS
+#endif
+    ) {
+        std::string template_XXXXXX_str = std::string(template_prefix) + "XXXXXX";
+
+#ifdef _WIN32
+
+        // based on
+        // https://github.com/wbx-github/uclibc-ng/blob/master/libc/misc/internals/tempname.c#L166
+
+        /* Generate a temporary file name based on TMPL. TMPL must match the
+        rules for mk[s]temp[s] (i.e. end in "prefixXXXXXXsuffix"). The name
+        constructed does not exist at the time of the call to __gen_tempname.
+        TMPL is overwritten with the result.
+        KIND may be one of:
+        __GT_NOCREATE:       simply verify that the name does not exist
+                                at the time of the call. mode argument is ignored.
+        __GT_FILE:           create the file using open(O_CREAT|O_EXCL)
+                                and return a read-write fd with given mode.
+        __GT_BIGFILE:        same as __GT_FILE but use open64().
+        __GT_DIR:            create a directory with given mode.
+        */
+
+        char *XXXXXX;
+        unsigned int i;
+        int save_errno = errno;
+        unsigned char randomness[6];
+        size_t len;
+        int suffixlen = 0; // always zero
+
+        len = template_XXXXXX_str.length*();
+        /* This is where the Xs start.  */
+        XXXXXX = template_XXXXXX + len - 6 - suffixlen;
+        if (len < 6 || suffixlen < 0 || suffixlen > len - 6
+            || strncmp (XXXXXX, "XXXXXX", 6))
+        {
+            errno = EINVAL;
+            this->fd = this->invalid_fd;
+            return false;
+        }
+    
+#ifndef TMP_MAX
+#define TMP_MAX 238328
+#endif
+
+        this->path = new char[MAX_PATH];
+
+        for (i = 0; i < TMP_MAX; ++i) {
+            unsigned char j;
+            /* Get some random data.  */
+            if (randombytes(randomness, sizeof(randomness)) != sizeof(randomness)) {
+                /* if random device nodes failed us, lets use the braindamaged ver */
+                brain_damaged_fillrand(randomness, sizeof(randomness));
+            }
+            for (j = 0; j < sizeof(randomness); ++j)
+                XXXXXX[j] = letters[randomness[j] % NUM_LETTERS];
+            
+            snprintf(this->path, MAX_PATH, "%s/%s", dir, template_XXXXXX_str.c_str());
+
+            this->fd = CreateFile (
+                this->path,
+                GENERIC_READ | GENERIC_WRITE,
+                0,
+                NULL,
+                OPEN_ALWAYS,
+                FILE_ATTRIBUTE_TEMPORARY,
+                NULL
+            );
+
+            if (this->fd == INVALID_HANDLE_VALUE) {
+                if (GetLastError() != ERROR_ALREADY_EXISTS) {
+                    /* Any other error will apply also to other names we might
+                    try, and there are 2^32 or so of them, so give up now. */
+                    delete this->path;
+                    this->path = nullptr;
+                    this->fd = this->invalid_fd;
+                    goto LOOP_END;
+                }
+                // file exists, try again
+                continue;
+            }
+            // we got a valid handle, and we have a valid path
+            errno = save_errno;
+            return true;
+        }
+
+        /* We got out of the loop because we ran out of combinations to try.  */
+        errno = EEXIST;
+        delete[] this->path;
+        this->path = nullptr;
+        this->fd = this->invalid_fd;
+        return false;
+#else
+        auto t = std::string(dir) + "/" + template_XXXXXX_str;
         this->path = strdup(t.c_str());
         this->fd = mkstemp(this->path);
         if (this->fd < 0) {

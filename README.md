@@ -15,7 +15,11 @@ class TempFile {
     
     TempFile(const char * template_prefix);
 
+    TempFile(const char * dir, const char * template_prefix);
+
     bool construct(const char * template_prefix);
+
+    bool construct(const char * dir, const char * template_prefix);
 
     const char * get_path() const;
 
@@ -42,11 +46,15 @@ simply construct via `TempFile tmp("my_file");` and the `TempFile` will create a
 
 construct via `TempFile tmp;` and use `tmp.construct("my_file");` to create the temporary object when needed
 
+passing `nullptr` for `const char * template_prefix` will attempt to clean up if needed, and do nothing else
+
 both `TempFile tmp("my_file"); TempFile tmp2("my_file");` and `tmp.construct("my_file"); tmp2.construct("my_file");` are valid and will construct unique temporary files with different suffixes, eg `my_file543BN2` and `my_file4u3gim`
+
+a directory can be specified for both `TempFile` constructor, and `construct`, with the `dir` argument, if `nullptr` then the normal `(const char * template_prefix)` version is used instead
 
 `is_handle_valid` can be used to detect if the temporary file is actually created or needs to be created
 
-`construct` can be used to manually create a temporary file
+`construct` can be used to manually create a temporary file and is called by both constructors
 
 if `is_valid_handle()` returns `true` then `construct` will `no-op` and return `true`
 
@@ -58,10 +66,10 @@ if `construct` is called a second time, then it will `clean up and try again`, i
 
 this means if `construct` detects a `fatal error` then calling it again with the same arguments will usually produce the same `fatal error`, depending on what the `fatal error` itself is
 
+as a result, the user should `attempt to reset or resolve any errors` before calling `construct` again
+
 if no error is encountered and the temporary file is successfully created, then `construct` returns `true`
 
-
-the `const char * template_prefix` constructor calls `construct` in a loop until it succeeds
 
 # internals
 
