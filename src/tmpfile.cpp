@@ -162,7 +162,7 @@ char * strndup (const char *s, size_t n)
 */
 
 bool TempFile::is_handle_valid() {
-    return this->fd == this->invalid_fd;
+    return this->fd >= 0 && this->path != nullptr;
 }
 
 TempFile::TempFile() {
@@ -173,121 +173,170 @@ TempFile::TempFile() {
 TempFile::TempFile(const char * template_prefix) {
     this->fd = this->invalid_fd;
     this->path = nullptr;
+    construct(template_prefix);
+}
 
-    std::string template_XXXXXX_str = std::string(template_prefix) + "XXXXXX";
+bool TempFile::construct(const char * template_prefix) {
+    if (this->is_handle_valid()) {
+        // return true if we are already set-up
+        return true;
+    }
+
+    if (this->fd < 0 || this->path == nullptr) {
+        // if either of these are invalid, we must clean up, we somehow got corrupted
+        if (this->fd >= 0) {
+#ifdef _WIN32
+            CloseHandle(this->fd);
+#else
+            close(this->fd);
+#endif
+        }
+        if (this->path != nullptr) {
+#ifdef _WIN32
+            DeleteFile(this->path);
+            delete[] this->path;
+#else
+            free(this->path);
+#endif
+        }
+        this->fd = this->invalid_fd;
+        this->path = nullptr;
+    }
+
+    // we have cleaned up
+
+    while (
+        this->fd == invalid_fd
+        && path == nullptr
+#ifdef _WIN32
+        && GetLastError() == ERROR_ALREADY_EXISTS
+#endif
+    ) {
+        std::string template_XXXXXX_str = std::string(template_prefix) + "XXXXXX";
 
 #ifdef _WIN32
 
-    char *XXXXXX;
-    unsigned int i;
-    int save_errno = errno;
-    unsigned char randomness[6];
-    size_t len;
-    int suffixlen = 0; // always zero
+        char *XXXXXX;
+        unsigned int i;
+        int save_errno = errno;
+        unsigned char randomness[6];
+        size_t len;
+        int suffixlen = 0; // always zero
 
-    len = template_XXXXXX_str.length*();
-    /* This is where the Xs start.  */
-    XXXXXX = template_XXXXXX + len - 6 - suffixlen;
-    if (len < 6 || suffixlen < 0 || suffixlen > len - 6
-        || strncmp (XXXXXX, "XXXXXX", 6))
-    {
-        errno = EINVAL;
-        this->fd = this->invalid_fd;
-        return;
-    }
+        len = template_XXXXXX_str.length*();
+        /* This is where the Xs start.  */
+        XXXXXX = template_XXXXXX + len - 6 - suffixlen;
+        if (len < 6 || suffixlen < 0 || suffixlen > len - 6
+            || strncmp (XXXXXX, "XXXXXX", 6))
+        {
+            errno = EINVAL;
+            this->fd = this->invalid_fd;
+            return false;
+        }
     
 #ifndef TMP_MAX
 #define TMP_MAX 238328
 #endif
 
-    this->path = new char[MAX_PATH];
-    char tmp_path[MAX_PATH];
+        this->path = new char[MAX_PATH];
+        char tmp_path[MAX_PATH];
 
-    for (i = 0; i < TMP_MAX; ++i) {
-        unsigned char j;
-        /* Get some random data.  */
-        if (randombytes(randomness, sizeof(randomness)) != sizeof(randomness)) {
-            /* if random device nodes failed us, lets use the braindamaged ver */
-            brain_damaged_fillrand(randomness, sizeof(randomness));
-        }
-        for (j = 0; j < sizeof(randomness); ++j)
-            XXXXXX[j] = letters[randomness[j] % NUM_LETTERS];
-        
-        std::memset(tmp_path, 0, MAX_PATH);
-
-        DWORD rp = GetTempPathA(MAX_PATH, tmp_path);
-        if (!(rp > MAX_PATH || rp == 0)) {
-            snprintf(this->path, MAX_PATH, "%s/%s", tmp_path, template_XXXXXX_str.c_str());
-
-            this->fd = CreateFile (
-                this->path,
-                GENERIC_READ | GENERIC_WRITE,
-                0,
-                NULL,
-                OPEN_ALWAYS,
-                FILE_ATTRIBUTE_TEMPORARY,
-                NULL
-            );
-
-            if (this->fd == INVALID_HANDLE_VALUE) {
-                if (GetLastError() != ERROR_ALREADY_EXISTS) {
-                    /* Any other error will apply also to other names we might
-                    try, and there are 2^32 or so of them, so give up now. */
-                    delete this->path;
-                    this->path = nullptr;
-                    this->fd = this->invalid_fd;
-                    return;
-                }
-                continue;
+        for (i = 0; i < TMP_MAX; ++i) {
+            unsigned char j;
+            /* Get some random data.  */
+            if (randombytes(randomness, sizeof(randomness)) != sizeof(randomness)) {
+                /* if random device nodes failed us, lets use the braindamaged ver */
+                brain_damaged_fillrand(randomness, sizeof(randomness));
             }
-            return;
+            for (j = 0; j < sizeof(randomness); ++j)
+                XXXXXX[j] = letters[randomness[j] % NUM_LETTERS];
+            
+            std::memset(tmp_path, 0, MAX_PATH);
+
+            DWORD rp = GetTempPathA(MAX_PATH, tmp_path);
+            if (!(rp > MAX_PATH || rp == 0)) {
+                snprintf(this->path, MAX_PATH, "%s/%s", tmp_path, template_XXXXXX_str.c_str());
+
+                this->fd = CreateFile (
+                    this->path,
+                    GENERIC_READ | GENERIC_WRITE,
+                    0,
+                    NULL,
+                    OPEN_ALWAYS,
+                    FILE_ATTRIBUTE_TEMPORARY,
+                    NULL
+                );
+
+                if (this->fd == INVALID_HANDLE_VALUE) {
+                    if (GetLastError() != ERROR_ALREADY_EXISTS) {
+                        /* Any other error will apply also to other names we might
+                        try, and there are 2^32 or so of them, so give up now. */
+                        delete this->path;
+                        this->path = nullptr;
+                        this->fd = this->invalid_fd;
+                        goto LOOP_END;
+                    }
+                    // file exists, try again
+                    continue;
+                }
+                // we got a valid handle, and we have a valid path
+                errno = save_errno;
+                return true;
+            }
+            // we failed to get a temporary path
+            errno = save_errno;
+            delete[] this->path;
+            this->path = nullptr;
+            this->fd = this->invalid_fd;
         }
-        // we failed to get a temporary path
-        errno = save_errno;
+
+        /* We got out of the loop because we ran out of combinations to try.  */
+        errno = EEXIST;
         delete[] this->path;
-        this->fd = this->invalid_fd;
-        return;
-    }
-
-    /* We got out of the loop because we ran out of combinations to try.  */
-    errno = EEXIST;
-    delete[] this->path;
-    this->fd = this->invalid_fd;
-    return;
-#else
-    const char * tmp_dir;
-    /*
-        ISO/IEC 9945 (POSIX): The path supplied by the first environment variable found in the list
-         TMPDIR, TMP, TEMP, TEMPDIR.
-        
-        If none of these are found, "/tmp", or, if macro __ANDROID__ is defined, "/data/local/tmp"
-    */
-    tmp_dir = getenv("TMPDIR");
-    if (tmp_dir == nullptr) {
-        tmp_dir = getenv("TMP");
-        if (tmp_dir == nullptr) {
-            tmp_dir = getenv("TEMP");
-            if (tmp_dir == nullptr) {
-                tmp_dir = getenv("TEMPDIR");
-                if (tmp_dir == nullptr) {
-#ifdef __ANDROID__
-                    tmp_dir = "/data/local/tmp";
-#else
-                    tmp_dir = "/tmp";
-#endif
-                }
-            }
-        }
-    }
-    auto t = std::string(tmp_dir) + "/" + template_XXXXXX_str;
-    this->path = strdup(t.c_str());
-    this->fd = mkstemp(this->path);
-    if (this->fd < 0) {
-        free(this->path);
         this->path = nullptr;
         this->fd = this->invalid_fd;
-    }
+        return false;
+#else
+        const char * tmp_dir;
+        /*
+            ISO/IEC 9945 (POSIX): The path supplied by the first environment variable found in the list
+            TMPDIR, TMP, TEMP, TEMPDIR.
+            
+            If none of these are found, "/tmp", or, if macro __ANDROID__ is defined, "/data/local/tmp"
+        */
+        tmp_dir = getenv("TMPDIR");
+        if (tmp_dir == nullptr) {
+            tmp_dir = getenv("TMP");
+            if (tmp_dir == nullptr) {
+                tmp_dir = getenv("TEMP");
+                if (tmp_dir == nullptr) {
+                    tmp_dir = getenv("TEMPDIR");
+                    if (tmp_dir == nullptr) {
+#ifdef __ANDROID__
+                        tmp_dir = "/data/local/tmp";
+#else
+                        tmp_dir = "/tmp";
 #endif
+                    }
+                }
+            }
+        }
+        auto t = std::string(tmp_dir) + "/" + template_XXXXXX_str;
+        this->path = strdup(t.c_str());
+        this->fd = mkstemp(this->path);
+        if (this->fd < 0) {
+            free(this->path);
+            this->path = nullptr;
+            if (fd != invalid_fd) {
+                return false;
+            }
+            goto LOOP_END;
+        }
+        return true;
+#endif
+        LOOP_END:
+    }
+    return false;
 }
 
 const char * TempFile::get_path() const {
@@ -303,7 +352,7 @@ TempFile::get_handle() const {
 }
 
 TempFile::~TempFile() {
-    if (this->fd != this->invalid_fd) {
+    if (this->fd >= 0) {
 #ifdef _WIN32
         CloseHandle(this->fd);
 #else
