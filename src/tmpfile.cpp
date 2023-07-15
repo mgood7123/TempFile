@@ -188,6 +188,7 @@ bool TempFile::construct(const char * template_prefix) {
             DeleteFile(this->path);
             delete[] this->path;
 #else
+            unlink(this->path);
             free(this->path);
 #endif
         }
@@ -376,6 +377,7 @@ bool TempFile::construct(const char * dir, const char * template_prefix) {
             DeleteFile(this->path);
             delete[] this->path;
 #else
+            unlink(this->path);
             free(this->path);
 #endif
         }
@@ -531,6 +533,7 @@ TempFile::~TempFile() {
         DeleteFile(this->path);
         delete[] this->path;
 #else
+        unlink(this->path);
         free(this->path);
 #endif
         this->path = nullptr;
