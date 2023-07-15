@@ -33,7 +33,9 @@ simply construct via `TempFile tmp("my_file");` and the `TempFile` will create a
 
 the platform spacific handle can be obtained with `get_handle`
 
-the absolute path to the temporary file can be obtained via `path`
+the absolute path to the temporary file can be obtained via `get_path`
+
+the handle and path are automatically cleaned up when the `TempFile` object goes out of scope
 
 # internals
 
