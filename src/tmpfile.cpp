@@ -1,5 +1,7 @@
 #include <tmpfile.h>
 
+#include <string>
+
 /*
  * Write `n` bytes of high quality random bytes to `buf`
  */
@@ -345,14 +347,15 @@ bool TempFile::construct(const char * template_prefix) {
         return true;
 #endif
         LOOP_END:
+        continue;
     }
     return false;
 }
 
 bool TempFile::construct(const char * dir, const char * template_prefix) {
-    if (dir == nullptr) [
-        return construct(template_prefix);
-    ]
+    if (dir == nullptr) {
+        return this->construct(template_prefix);
+    }
 
     if (this->is_handle_valid()) {
         // return true if we are already set-up
@@ -385,7 +388,7 @@ bool TempFile::construct(const char * dir, const char * template_prefix) {
     if (template_prefix == nullptr) {
         return false;
     }
-    
+
     while (
         this->fd == invalid_fd
         && path == nullptr
@@ -497,6 +500,7 @@ bool TempFile::construct(const char * dir, const char * template_prefix) {
         return true;
 #endif
         LOOP_END:
+        continue;
     }
     return false;
 }
