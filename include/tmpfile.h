@@ -45,7 +45,7 @@ public:
     bool is_handle_valid();
 
     TempFile();
-    TempFile(const char * template_XXXXXX);
+    TempFile(const char * template_prefix);
     const char * get_path() const;
     #ifdef _WIN32
     HANDLE get_handle() const;

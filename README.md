@@ -1,159 +1,72 @@
-# Composable-List
-a C++ Composable List, featuring both immutable and mutable variants, similar to Java.Function.andThen
-
-# example
+# TempFile
+a C++ Cross-Platform temporary file library
 
 ```cpp
-int main() {
+class TempFile {
+    #ifdef _WIN32
+    HANDLE fd;
+    const HANDLE invalid_fd = INVALID_HANDLE_VALUE;
+    #else
+    int fd;
+    const int invalid_fd = -1;
+    #endif
 
-    #define M(v) [](int a) { std::cout << #v " " << std::to_string(a) << std::endl; return a+1; }
+    char * path;
 
-    {
-        // a
-        auto a = new Composable_List<int> (M( a ));
-        a->visitFromStart(1);
-        std::cout << std::endl;
-        // a, b
-        auto b = a->after(M( b ));
-        b->visitFromStart(1);
-        std::cout << std::endl;
-        // b, a, b
-        auto b1 = a->before(M( b ));
-        b1->visitFromStart(1);
-        std::cout << std::endl;
-        // b, a, c, b
-        auto c = a->after(M( c ));
-        c->visitFromStart(1);
-        std::cout << std::endl;
-        // b, d, a, c, b
-        auto d = a->before(M( d ));
-        d->visitFromStart(1);
-        std::cout << std::endl;
-        // b, e, d, a, c, b
-        auto e = d->before(M( e ));
-        e->visitFromStart(1);
-        std::cout << std::endl;
-        // b, e, d, f, a, c, b
-        auto f = d->after(M( f ));
-        f->visitFromStart(1);
-        std::cout << std::endl;
-        // b, e, d, f, g, a, c, b
-        auto g = f->after(M( g ));
-        g->visitFromStart(1);
-        std::cout << std::endl;
-        // b, e, d, f, g, a, c, b
-        b->visitFromStart(1);
-    } {
-        // a
-        auto a = new Composable_List_COW<int> (M( a ));
-        a->visitFromStart(2);
-        std::cout << std::endl;
-        // a, b
-        auto b = a->after(M( b ));
-        b->visitFromStart(2);
-        std::cout << std::endl;
-        // b, a, b
-        auto b1 = b->before(M( b ));
-        b1->visitFromStart(2);
-        std::cout << std::endl;
-        // b, a, c, b
-        auto c = b1->after(a, M( c ));
-        c->visitFromStart(2);
-        std::cout << std::endl;
-        // b, d, a, c, b
-        auto d = c->before(a, M( d ));
-        d->visitFromStart(2);
-        std::cout << std::endl;
-        // b, e, d, a, c, b
-        auto e = d->before(d, M( e ));
-        e->visitFromStart(2);
-        std::cout << std::endl;
-        // b, e, d, f, a, c, b
-        auto f = e->after(d, M( f ));
-        f->visitFromStart(2);
-        std::cout << std::endl;
-        // b, e, d, f, g, a, c, b
-        auto g = f->after(f, M( g ));
-        g->visitFromStart(2);
-        std::cout << std::endl;
-        // a, b
-        b->visitFromStart(2);
+public:
+
+    bool is_handle_valid();
+
+    TempFile();
+    TempFile(const char * template_prefix);
+    const char * get_path() const;
+    #ifdef _WIN32
+    HANDLE get_handle() const;
+    #else
+    int get_handle() const;
+    #endif
+    ~TempFile();
+};
+```
+
+simply construct via `TempFile tmp("my_file");` and the `TempFile` will create a temporary file for you
+
+the platform spacific handle can be obtained with `get_handle`
+
+the absolute path to the temporary file can be obtained via `path`
+
+# internals
+
+under the hood we use
+- Linux - `mkstemp` + tmp dir lookup
+- Windows - a `for` loop + `GetTempPathA` + `CreateFile` + an algorithm to generate the `XXXXXX` replacement characters
+
+on posix systems (linux) we look up the tmp dir using the following approach
+
+```cpp
+    const char * tmp_dir;
+    /*
+        ISO/IEC 9945 (POSIX): The path supplied by the first environment variable found in the list
+         TMPDIR, TMP, TEMP, TEMPDIR.
+        
+        If none of these are found, "/tmp", or, if macro __ANDROID__ is defined, "/data/local/tmp"
+    */
+    tmp_dir = getenv("TMPDIR");
+    if (tmp_dir == nullptr) {
+        tmp_dir = getenv("TMP");
+        if (tmp_dir == nullptr) {
+            tmp_dir = getenv("TEMP");
+            if (tmp_dir == nullptr) {
+                tmp_dir = getenv("TEMPDIR");
+                if (tmp_dir == nullptr) {
+#ifdef __ANDROID__
+                    tmp_dir = "/data/local/tmp";
+#else
+                    tmp_dir = "/tmp";
+#endif
+                }
+            }
+        }
     }
-
-    #define M2(v) []() { std::cout << #v << std::endl; }
-
-    {
-        // a
-        auto a = new Composable_List<void> (M2( a ));
-        a->visitFromStart();
-        std::cout << std::endl;
-        // a, b
-        auto b = a->after(M2( b ));
-        b->visitFromStart();
-        std::cout << std::endl;
-        // b, a, b
-        auto b1 = a->before(M2( b ));
-        b1->visitFromStart();
-        std::cout << std::endl;
-        // b, a, c, b
-        auto c = a->after(M2( c ));
-        c->visitFromStart();
-        std::cout << std::endl;
-        // b, d, a, c, b
-        auto d = a->before(M2( d ));
-        d->visitFromStart();
-        std::cout << std::endl;
-        // b, e, d, a, c, b
-        auto e = d->before(M2( e ));
-        e->visitFromStart();
-        std::cout << std::endl;
-        // b, e, d, f, a, c, b
-        auto f = d->after(M2( f ));
-        f->visitFromStart();
-        std::cout << std::endl;
-        // b, e, d, f, g, a, c, b
-        auto g = f->after(M2( g ));
-        g->visitFromStart();
-        std::cout << std::endl;
-        // b, e, d, f, g, a, c, b
-        b->visitFromStart();
-    } {
-        // a
-        auto a = new Composable_List_COW<void> (M2( a ));
-        a->visitFromStart();
-        std::cout << std::endl;
-        // a, b
-        auto b = a->after(M2( b ));
-        b->visitFromStart();
-        std::cout << std::endl;
-        // b, a, b
-        auto b1 = b->before(M2( b ));
-        b1->visitFromStart();
-        std::cout << std::endl;
-        // b, a, c, b
-        auto c = b1->after(a, M2( c ));
-        c->visitFromStart();
-        std::cout << std::endl;
-        // b, d, a, c, b
-        auto d = c->before(a, M2( d ));
-        d->visitFromStart();
-        std::cout << std::endl;
-        // b, e, d, a, c, b
-        auto e = d->before(d, M2( e ));
-        e->visitFromStart();
-        std::cout << std::endl;
-        // b, e, d, f, a, c, b
-        auto f = e->after(d, M2( f ));
-        f->visitFromStart();
-        std::cout << std::endl;
-        // b, e, d, f, g, a, c, b
-        auto g = f->after(f, M2( g ));
-        g->visitFromStart();
-        std::cout << std::endl;
-        // a, b
-        b->visitFromStart();
-    }
-
-    return 0;
-}
+    auto t = std::string(tmp_dir) + "/" + template_XXXXXX_str;
 ```

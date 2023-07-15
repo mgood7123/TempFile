@@ -170,9 +170,11 @@ TempFile::TempFile() {
     this->path = nullptr;
 }
 
-TempFile::TempFile(const char * template_XXXXXX) {
+TempFile::TempFile(const char * template_prefix) {
     this->fd = this->invalid_fd;
     this->path = nullptr;
+
+    std::string template_XXXXXX_str = std::string(template_prefix) + "XXXXXX";
 
 #ifdef _WIN32
 
@@ -183,7 +185,7 @@ TempFile::TempFile(const char * template_XXXXXX) {
     size_t len;
     int suffixlen = 0; // always zero
 
-    len = strlen (template_XXXXXX);
+    len = template_XXXXXX_str.length*();
     /* This is where the Xs start.  */
     XXXXXX = template_XXXXXX + len - 6 - suffixlen;
     if (len < 6 || suffixlen < 0 || suffixlen > len - 6
@@ -215,7 +217,7 @@ TempFile::TempFile(const char * template_XXXXXX) {
 
         DWORD rp = GetTempPathA(MAX_PATH, tmp_path);
         if (!(rp > MAX_PATH || rp == 0)) {
-            snprintf(this->path, MAX_PATH, "%s/%s", tmp_path, template_XXXXXX);
+            snprintf(this->path, MAX_PATH, "%s/%s", tmp_path, template_XXXXXX_str.c_str());
 
             this->fd = CreateFile (
                 this->path,
@@ -253,7 +255,32 @@ TempFile::TempFile(const char * template_XXXXXX) {
     this->fd = this->invalid_fd;
     return;
 #else
-    this->path = strdup(template_XXXXXX);
+    const char * tmp_dir;
+    /*
+        ISO/IEC 9945 (POSIX): The path supplied by the first environment variable found in the list
+         TMPDIR, TMP, TEMP, TEMPDIR.
+        
+        If none of these are found, "/tmp", or, if macro __ANDROID__ is defined, "/data/local/tmp"
+    */
+    tmp_dir = getenv("TMPDIR");
+    if (tmp_dir == nullptr) {
+        tmp_dir = getenv("TMP");
+        if (tmp_dir == nullptr) {
+            tmp_dir = getenv("TEMP");
+            if (tmp_dir == nullptr) {
+                tmp_dir = getenv("TEMPDIR");
+                if (tmp_dir == nullptr) {
+#ifdef __ANDROID__
+                    tmp_dir = "/data/local/tmp";
+#else
+                    tmp_dir = "/tmp";
+#endif
+                }
+            }
+        }
+    }
+    auto t = std::string(tmp_dir) + "/" + template_XXXXXX_str;
+    this->path = strdup(t.c_str());
     this->fd = mkstemp(this->path);
     if (this->fd < 0) {
         free(this->path);
