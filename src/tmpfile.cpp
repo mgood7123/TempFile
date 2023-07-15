@@ -340,7 +340,7 @@ bool TempFile::construct(const char * template_prefix) {
         if (this->fd < 0) {
             free(this->path);
             this->path = nullptr;
-            if (fd != invalid_fd) {
+            if (this->fd == invalid_fd) {
                 return false;
             }
             goto LOOP_END;
@@ -494,7 +494,7 @@ bool TempFile::construct(const char * dir, const char * template_prefix) {
         if (this->fd < 0) {
             free(this->path);
             this->path = nullptr;
-            if (fd != invalid_fd) {
+            if (fd == invalid_fd) {
                 return false;
             }
             goto LOOP_END;
