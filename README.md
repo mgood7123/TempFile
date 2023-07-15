@@ -42,6 +42,8 @@ the handle and path are automatically cleaned up when the `TempFile` object goes
 
 # construction
 
+the constructor `TempFile()` does not create any temporary file, use `construct` to create one
+
 simply construct via `TempFile tmp("my_file");` and the `TempFile` will create a temporary file for you
 
 construct via `TempFile tmp;` and use `tmp.construct("my_file");` to create the temporary object when needed
