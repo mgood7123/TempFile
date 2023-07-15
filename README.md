@@ -12,13 +12,19 @@ class TempFile {
     bool is_handle_valid();
 
     TempFile();
+    
     TempFile(const char * template_prefix);
+
+    bool construct(const char * template_prefix);
+
     const char * get_path() const;
+
     #ifdef _WIN32
     HANDLE get_handle() const;
     #else
     int get_handle() const;
     #endif
+
     ~TempFile();
 };
 ```
