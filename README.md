@@ -169,7 +169,8 @@ if `is_valid()` returns `true` then `construct` will `no-op` and return `true`
 
 otherwise `construct` will `continue to attempt to create the temporary file until it encounters an error that it considers to be fatal`
 
-if such an error is returned, `false` is returned, and the user should check `get_handle` on unix, `errno` on unix and windows, and `GetLastError` on windows
+if such an error is encountered, `false` is returned
+- the error can be diagnosed by checking `get_handle` on unix, `errno` on unix and windows, and `GetLastError` on windows
 
 if `construct` is called a second time, then it will `clean up and try again`, if a `fatal error` has `previously occured` it will be ignored
 
