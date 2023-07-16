@@ -65,17 +65,6 @@ static void brain_damaged_fillrand(unsigned std::string &buf, unsigned int len)
     }
 }
 
-using LP64__LONG = long long;
-
-long long random(void) {
-    LP64__LONG randomness[1];
-    if (randombytes((unsigned char*)randomness, sizeof(LP64__LONG)) != sizeof(LP64__LONG)) {
-        /* if random device nodes failed us, lets use the braindamaged ver */
-        brain_damaged_fillrand((unsigned char*)randomness, sizeof(LP64__LONG));
-    }
-    return randomness[0];
-}
-
 #else
 #include <string.h> // strdup
 #include <stdlib.h> // free
