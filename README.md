@@ -50,9 +50,9 @@ construct via `TempFile tmp;` and use `tmp.construct("my_file");` to create the 
 
 passing `nullptr` for `const char * template_prefix` will attempt to clean up if needed, and do nothing else
 
-both `TempFile tmp("my_file"); TempFile tmp2("my_file");` and `tmp.construct("my_file"); tmp2.construct("my_file");` are valid and will construct unique temporary files with different suffixes, eg `my_file543BN2` and `my_file4u3gim`
+both `TempFile tmp("my_file"); TempFile tmp2("my_file");` and `tmp.construct("my_file"); tmp2.construct("my_file");` are valid and will construct unique temporary files with different suffixes, eg `my_file543BN2` and `my_file4u3gIm`
 
-a directory can be specified for both `TempFile` constructor, and `construct`, with the `dir` argument, if `nullptr` then the normal `(const char * template_prefix)` version is used instead
+a directory (`which must exist`) can be specified for both `TempFile` constructor, and `construct`, with the `dir` argument, if `nullptr` then the normal `(const char * template_prefix)` version is used instead
 
 `is_handle_valid` can be used to detect if the temporary file is actually created or needs to be created
 
