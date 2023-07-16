@@ -19,7 +19,7 @@
 /*
  * Write `n` bytes of high quality random bytes to `buf`
  */
-int randombytes(void *buf, size_t n);
+extern "C" int randombytes(void *buf, size_t n);
 
 #ifdef _WIN32
 
@@ -257,6 +257,125 @@ bool TempFile::construct(const std::string & template_prefix) {
     return construct(tmp_dir, template_prefix);
 }
 
+#include <random>
+#include <functional> // std::hash
+#include <chrono> // epoch
+#include <iostream>
+#include <iterator>
+
+static char * rng_get_fallback_buf() {
+    static char buf[1];
+    return buf;
+}
+
+static int rng_get_fallback() {
+    static auto unused = randombytes(rng_get_fallback_buf(), sizeof(char));
+    return static_cast<int>(rng_get_fallback_buf()[0]);
+}
+
+static auto rng_get() {
+    static int r = std::random_device()();
+    if (r == 0) {
+        static int r2 = rng_get_fallback();
+        return r2 == 0 ? 1 : r2;
+    } else {
+        return r;
+    }
+}
+
+static void * get_stack_var() {
+    int foo = 6;
+    return std::addressof(foo);
+}
+
+// static initialization order is unspecified, use macros to garentee order
+using SEED_TYPE = long unsigned int;
+
+template <typename H>
+std::size_t h(const H & ha) {
+    std::size_t hash = std::hash<H>()(ha);
+    return hash == 0 ? 1 : hash;
+}
+
+#define HASH_CSTR(c) h(std::string(reinterpret_cast<const char*>(c)))
+#define HASH_CSTRL(c, l) h(std::string(reinterpret_cast<const char*>(c), l))
+#define HASH_INT(c) h(static_cast<int>(c))
+#define HASH_PTR(c) h(reinterpret_cast<size_t>(c))
+
+#define seed_2 (std::chrono::system_clock::now().time_since_epoch().count() == 0 ? 1 : std::chrono::system_clock::now().time_since_epoch().count())
+#define seed_1 rng_get() * rng_get() * seed_2
+#define seed_3 HASH_CSTR(__FILE__) + HASH_CSTR(__DATE__) + seed_1
+#define seed_4 HASH_INT(__LINE__) + HASH_CSTR(__DATE__) + seed_1
+#define seed_5 HASH_CSTR(__FILE__) + HASH_INT(__LINE__) + HASH_CSTR(__DATE__) + seed_1
+#define seed_6 HASH_PTR(&rng_get) + seed_1
+#define seed_7 reinterpret_cast<size_t>(get_stack_var()) + seed_1
+#define seed_8 seed_2 * seed_1
+#define seed_9 seed_2 * seed_2
+#define seed \
+    static_cast<SEED_TYPE>(seed_1), static_cast<SEED_TYPE>(seed_2), static_cast<SEED_TYPE>(seed_3), \
+    static_cast<SEED_TYPE>(seed_4), static_cast<SEED_TYPE>(seed_5), static_cast<SEED_TYPE>(seed_6), \
+    static_cast<SEED_TYPE>(seed_7), static_cast<SEED_TYPE>(seed_8), static_cast<SEED_TYPE>(seed_9)
+
+// use given seq to generate random seeds to produce more random seeds
+
+class SeedList
+{
+    public:
+    std::vector<std::seed_seq*> seeds;
+    SeedList() {}
+
+    // mutate the seed N times, the original seed must have randomness
+    std::seed_seq & get(int mutation_count, SEED_TYPE s1, SEED_TYPE s2, SEED_TYPE s3, SEED_TYPE s4, SEED_TYPE s5, SEED_TYPE s6, SEED_TYPE s7, SEED_TYPE s8, SEED_TYPE s9) {
+        // std::cout << "creating seed" << std::endl;
+        std::vector<SEED_TYPE> current_seed_vec = {s1, s2, s3, s4, s5, s6, s7, s8, s9};
+        // std::cout << "seed: { ";
+        // std::copy(current_seed_vec.begin(), current_seed_vec.end(), std::ostream_iterator<SEED_TYPE>(std::cout, ", "));
+        // std::cout << " }" << std::endl;
+
+
+        for (int mutation_c = 0; mutation_c < mutation_count; mutation_c ++) {
+
+            auto tmp_seq = std::seed_seq(current_seed_vec.begin(), current_seed_vec.end());
+
+            std::mt19937_64 s {tmp_seq};
+            
+            current_seed_vec = {s(), s(), s(), s(), s(), s(), s(), s(), s()};
+            
+            // std::cout << "mutated seed: { ";
+            // std::copy(current_seed_vec.begin(), current_seed_vec.end(), std::ostream_iterator<SEED_TYPE>(std::cout, ", "));
+            // std::cout << " }" << std::endl;
+        }
+
+        seeds.push_back(new std::seed_seq(current_seed_vec.begin(), current_seed_vec.end()));
+        return *seeds.back();
+    }
+
+    std::seed_seq & get(SEED_TYPE s1, SEED_TYPE s2, SEED_TYPE s3, SEED_TYPE s4, SEED_TYPE s5, SEED_TYPE s6, SEED_TYPE s7, SEED_TYPE s8, SEED_TYPE s9) {
+        return get(1, s1, s2, s3, s4, s5, s6, s7, s8, s9);
+    }
+
+    ~SeedList() {
+        for(auto s : seeds) {
+            // std::cout << "deleting seed" << std::endl;
+            delete s;
+        }
+    }
+};
+
+
+// 1 mutation is sufficent to generate a randomized seed
+//   for all seed components as long as one component contains true randomness
+//  however we can mutate more times if needed
+
+
+std::mt19937_64& rng() {
+    static SeedList seq_list;
+    static std::mt19937_64 rng_ {seq_list.get(1, seed)};
+    return rng_;
+}
+
+#define LETTER_DIST letters[std::uniform_int_distribution<> dist {0, NUM_LETTERS-1} (rng())]
+
 bool TempFile::construct(const std::string & dir, const std::string & template_prefix) {
     if (dir.length() == 0) {
         return construct(template_prefix);
@@ -300,7 +419,6 @@ bool TempFile::construct(const std::string & dir, const std::string & template_p
     */
 
     unsigned int i;
-    unsigned char randomness[6];
 #endif
 
     while (true) {
@@ -317,17 +435,12 @@ bool TempFile::construct(const std::string & dir, const std::string & template_p
         for (i = 0; i < TMP_MAX; ++i) {
             
             /* Get some random data.  */
-            if (randombytes(randomness, 6) != 6) {
-                /* if random device nodes failed us, lets use the braindamaged ver */
-                brain_damaged_fillrand(randomness, 6);
-            }
-
-            XXXXXX[0] = letters[randomness[0] % NUM_LETTERS]; // 1
-            XXXXXX[1] = letters[randomness[1] % NUM_LETTERS]; // 2
-            XXXXXX[2] = letters[randomness[2] % NUM_LETTERS]; // 3
-            XXXXXX[3] = letters[randomness[3] % NUM_LETTERS]; // 4
-            XXXXXX[4] = letters[randomness[4] % NUM_LETTERS]; // 5
-            XXXXXX[5] = letters[randomness[5] % NUM_LETTERS]; // 6
+            XXXXXX[0] = LETTER_DIST; // 1
+            XXXXXX[1] = LETTER_DIST; // 2
+            XXXXXX[2] = LETTER_DIST; // 3
+            XXXXXX[3] = LETTER_DIST; // 4
+            XXXXXX[4] = LETTER_DIST; // 5
+            XXXXXX[5] = LETTER_DIST; // 6
             
             this->data->fd = CreateFile (
                 path.c_str(),
