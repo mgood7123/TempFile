@@ -84,21 +84,23 @@ release_ninja_directories: | $(release_ninja_build_dir_target) $(release_executa
 debug_asan_directories: | $(debug_asan_build_dir_target) $(debug_asan_executable_dir_target)
 debug_ninja_asan_directories: | $(debug_ninja_asan_build_dir_target) $(debug_asan_executable_dir_target)
 
-ifneq ($(CCOMPILER),)
-    ifneq ($(CXXCOMPILER),)
-        cmake_run_flags = -DCMAKE_C_COMPILER="$(CCOMPILER)" -DCMAKE_CXX_COMPILER="$(CXXCOMPILER)"
-    endif
-    ifeq ($(CXXCOMPILER),)
-        cmake_run_flags = -DCMAKE_C_COMPILER="$(CCOMPILER)"
-    endif
-endif
-ifeq ($(CCOMPILER),)
-    ifneq ($(CXXCOMPILER),)
-        cmake_run_flags = -DCMAKE_CXX_COMPILER="$(CXXCOMPILER)"
-    endif
+ifneq ($(CC),)
+	C_COMPILER_flags = -DCMAKE_C_COMPILER="$(CC)"
 endif
 
-cmake_run_flags += $(CMAKE_FLAGS)
+ifneq ($(CXX),)
+	CXX_COMPILER_flags = -DCMAKE_CXX_COMPILER="$(CXX)"
+endif
+
+ifneq ($(CCOMPILER),)
+	C_COMPILER_flags = -DCMAKE_CXX_COMPILER="$(CCOMPILER)"
+endif
+
+ifneq ($(CXXCOMPILER),)
+	CXX_COMPILER_flags = -DCMAKE_CXX_COMPILER="$(CXXCOMPILER)"
+endif
+
+cmake_run_flags += $(C_COMPILER_flags) $(CXX_COMPILER_flags) $(CMAKE_FLAGS)
 
 build_debug: debug_directories
 	cd ${debug_build_dir} ; mkdir EXECUTABLES; cmake -DCMAKE_BUILD_TYPE=Debug $(cmake_run_flags) -DCMAKE_C_FLAGS_DEBUG="$(CFLAGS) -g3 -O0" -DCMAKE_CXX_FLAGS_DEBUG="$(CXXFLAGS) -g3 -O0" .. ; make && if test -e EXECUTABLES ; then cd EXECUTABLES; for file in * ; do mv -v $$file ../../$(debug_executable_dir)/$$FILE ; done ; cd ..; rmdir EXECUTABLES; fi
