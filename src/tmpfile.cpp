@@ -159,6 +159,10 @@ bool TempFile::CleanUp::is_valid() const {
     && path.length() != 0;
 }
 
+void TempFile::CleanUp::detach() {
+    detached = true;
+}
+
 void TempFile::CleanUp::reset_fd() {
 #ifdef _WIN32
     if (fd != INVALID_HANDLE_VALUE) {
@@ -179,12 +183,13 @@ void TempFile::CleanUp::reset_path() {
     if (!fatal_path && path.length() != 0) {
         SaveError e;
 #ifdef _WIN32
-        DeleteFile(path.c_str());
+        if (!detached) DeleteFile(path.c_str());
 #else
-        unlink(path.c_str());
+        if (!detached) unlink(path.c_str());
 #endif
     }
     path = {};
+    detached = false;
 }
 
 void TempFile::CleanUp::reset() {
@@ -521,6 +526,10 @@ bool TempFile::construct(const std::string & dir, const std::string & template_p
 
 const std::string & TempFile::get_path() const {
     return this->data->path;
+}
+
+void TempFile::detach() {
+    this->data->detach();
 }
 
 #ifdef _WIN32

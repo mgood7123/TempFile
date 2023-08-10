@@ -18,6 +18,8 @@ private:
 
         bool fatal_path = false;
 
+        bool detached = false;
+
 #ifdef _WIN32
         HANDLE fd;
 #else
@@ -27,6 +29,8 @@ private:
         CleanUp();
 
         bool is_valid() const;
+
+        void detach();
 
         void reset_fd();
 
@@ -51,6 +55,8 @@ public:
     bool construct(const std::string & dir, const std::string & template_prefix);
 
     const std::string & get_path() const;
+
+    void detach();
 
     #ifdef _WIN32
     HANDLE get_handle() const;

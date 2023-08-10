@@ -117,6 +117,8 @@ class TempFile {
 
     const std::string & get_path() const;
 
+    void detach();
+
     #ifdef _WIN32
     HANDLE get_handle() const;
     #else
@@ -131,7 +133,10 @@ the platform specific handle (`file descriptor on unix, HANDLE on windows`) can 
 the absolute path to the temporary file can be obtained via `get_path`
 - if creation fails this will contain the absolute path to the temporary file that was attempted to be created
 
-the handle and path are automatically cleaned up (`closed and deleted from filesystem`) when the `TempFile` object goes out of scope
+the handle and path are automatically cleaned up (`closed and deleted from filesystem`) when the `TempFile` object goes out of scope or is `reconstructed`
+- if `detach` is called before this occurs, the handle and path will be cleaned up but the file `will not` be deleted from the filesystem
+-   the detached state is reset after the path is cleaned up - `tmp.construct("a"); tmp.detach();` file `a` will `not be deleted from the filesystem` due to being in a `detached` state
+-   please do not abuse `detach`, it is intended for the purpose where a temporary file must be created and must still exist beyond the lifetime of the object/program
 
 # construction
 
