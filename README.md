@@ -108,12 +108,17 @@ class TempFile {
     TempFile();
     TempFile(const std::string & template_prefix);
     TempFile(const std::string & dir, const std::string & template_prefix);
-    ~TempFile();
 
-    bool is_valid();
+    TempFile(const std::string & template_prefix, bool log_create_close);
+    TempFile(const std::string & dir, const std::string & template_prefix, bool log_create_close);
+
+    bool is_valid() const;
 
     bool construct(const std::string & template_prefix);
     bool construct(const std::string & dir, const std::string & template_prefix);
+
+    bool construct(const std::string & template_prefix, bool log_create_close);
+    bool construct(const std::string & dir, const std::string & template_prefix, bool log_create_close);
 
     const std::string & get_path() const;
 
@@ -139,6 +144,9 @@ the handle and path are automatically cleaned up (`closed and deleted from files
 -   please do not abuse `detach`, it is intended for the purpose where a temporary file must be created and must still exist beyond the lifetime of the object/program
 
 # construction
+
+`bool log_create_close` argument
+ - if `true`, `TempFile` will output when it `creates`, `destroys`, or `detaches`, its associated file
 
 `const std::string & dir` argument
 - if  `dir` is `nullptr` or `""` then an `implementation specific directory` is chosen

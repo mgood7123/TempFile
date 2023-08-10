@@ -1,5 +1,7 @@
 #include <limits.h> // CHAR_BIT
 
+#include <iostream>
+
 // sanity check
 #if CHAR_BIT != 8
 #error system does not support 8 bit addressing
@@ -182,6 +184,13 @@ void TempFile::CleanUp::reset_fd() {
 void TempFile::CleanUp::reset_path() {
     if (!fatal_path && path.length() != 0) {
         SaveError e;
+        if (log_create_close) {
+            if (detached) {
+                std::cout << "detaching temporary file: " << path << std::endl;
+            } else {
+                std::cout << "deleting temporary file: " << path << std::endl;
+            }
+        }
 #ifdef _WIN32
         if (!detached) DeleteFile(path.c_str());
 #else
@@ -215,11 +224,25 @@ TempFile::TempFile(const std::string & dir, const std::string & template_prefix)
     construct(dir, template_prefix);
 }
 
+TempFile::TempFile(const std::string & template_prefix, bool log_create_close) {
+    data = std::make_shared<CleanUp>();
+    construct(template_prefix, log_create_close);
+}
+
+TempFile::TempFile(const std::string & dir, const std::string & template_prefix, bool log_create_close) {
+    data = std::make_shared<CleanUp>();
+    construct(dir, template_prefix, log_create_close);
+}
+
 bool TempFile::is_valid() const {
     return this->data->is_valid();
 }
 
 bool TempFile::construct(const std::string & template_prefix) {
+    return construct(template_prefix, false);
+}
+
+bool TempFile::construct(const std::string & template_prefix, bool log_create_close) {
     if (this->data->is_valid()) {
         // return true if we are already set-up
         return true;
@@ -259,7 +282,7 @@ bool TempFile::construct(const std::string & template_prefix) {
         }
     }
 #endif
-    return construct(tmp_dir, template_prefix);
+    return construct(tmp_dir, template_prefix, log_create_close);
 }
 
 #include <random>
@@ -382,8 +405,12 @@ std::mt19937_64& rng() {
 #define LETTER_DIST letters[std::uniform_int_distribution<> dist {0, NUM_LETTERS-1} (rng())]
 
 bool TempFile::construct(const std::string & dir, const std::string & template_prefix) {
+    return construct(dir, template_prefix, false);
+}
+
+bool TempFile::construct(const std::string & dir, const std::string & template_prefix, bool log_create_close) {
     if (dir.length() == 0) {
-        return construct(template_prefix);
+        return construct(template_prefix, log_create_close);
     }
 
     if (this->data->is_valid()) {
@@ -395,6 +422,8 @@ bool TempFile::construct(const std::string & dir, const std::string & template_p
 
     // we dont care if we get any errors here, if we fail to clean up then we should not consider this an error
     this->data->reset();
+
+    this->data->log_create_close = log_create_close;
 
     // we have cleaned up
 
@@ -478,6 +507,9 @@ bool TempFile::construct(const std::string & dir, const std::string & template_p
             }
             // we got a valid handle, and we have a valid path
             this->data->path = std::move(path);
+            if (this->data->log_create_close) {
+                std::cout << "created temporary file: " << this->data->path << std::endl;
+            }
             return true;
         }
 
@@ -508,6 +540,9 @@ bool TempFile::construct(const std::string & dir, const std::string & template_p
             goto LOOP_CONTINUE;
         }
         this->data->path = std::move(path);
+        if (this->data->log_create_close) {
+            std::cout << "created temporary file: " << this->data->path << std::endl;
+        }
         return true;
 #endif
         LOOP_CONTINUE:

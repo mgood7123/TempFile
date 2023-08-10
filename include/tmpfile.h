@@ -20,6 +20,8 @@ private:
 
         bool detached = false;
 
+        bool log_create_close = false;
+
 #ifdef _WIN32
         HANDLE fd;
 #else
@@ -43,16 +45,23 @@ private:
 
     std::shared_ptr<CleanUp> data;
 
+
 public:
 
     TempFile();
     TempFile(const std::string & template_prefix);
     TempFile(const std::string & dir, const std::string & template_prefix);
 
+    TempFile(const std::string & template_prefix, bool log_create_close);
+    TempFile(const std::string & dir, const std::string & template_prefix, bool log_create_close);
+
     bool is_valid() const;
 
     bool construct(const std::string & template_prefix);
     bool construct(const std::string & dir, const std::string & template_prefix);
+
+    bool construct(const std::string & template_prefix, bool log_create_close);
+    bool construct(const std::string & dir, const std::string & template_prefix, bool log_create_close);
 
     const std::string & get_path() const;
 
