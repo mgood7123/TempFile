@@ -9,7 +9,7 @@ if(NOT COMMAND testBuilder_build)
 endif()
 
 testBuilder_add_source(tmpfile src/tmpfile.cpp)
-testBuilder_add_source(tmpfile randombytes/randombytes.c)
+testBuilder_add_source(tmpfile src/randombytes.c)
 testBuilder_add_include(tmpfile include)
 testBuilder_build_shared_library(tmpfile)
 

@@ -10,6 +10,10 @@
 #include <memory>
 #include <string>
 
+class TempFile;
+class TempFileFD;
+class TempFileFILE;
+
 class TempFile {
 private:
     struct CleanUp {
@@ -65,14 +69,128 @@ public:
 
     const std::string & get_path() const;
 
-    void detach();
+    TempFile & detach();
 
     #ifdef _WIN32
     HANDLE get_handle() const;
     #else
     int get_handle() const;
     #endif
+
+    TempFile & reset();
+
+    TempFileFD toFD();
+    TempFileFILE toFILE();
+    friend TempFileFD;
+    friend TempFileFILE;
+};
+
+class TempFileFD {
+private:
+    struct CleanUp {
+
+        std::string path;
+
+        bool fatal_path = false;
+
+        bool detached = false;
+
+        int fd;
+
+        CleanUp();
+
+        bool is_valid() const;
+
+        void detach();
+
+        void reset_fd();
+
+        void reset_path();
+
+        void reset();
+
+        ~CleanUp();
+    };
+
+    std::shared_ptr<CleanUp> data;
+
+public:
+
+    TempFileFD();
+    TempFileFD(const std::string & template_prefix);
+    TempFileFD(const std::string & dir, const std::string & template_prefix);
+
+    bool is_valid() const;
+
+    bool construct(const std::string & template_prefix);
+    bool construct(const std::string & dir, const std::string & template_prefix);
+
+    const std::string & get_path() const;
+
+    TempFileFD & detach();
+
+    int get_handle() const;
     
+    TempFileFD & reset();
+
+    TempFile toHandle();
+    TempFileFILE toFILE();
+    friend TempFile;
+    friend TempFileFILE;
+};
+
+class TempFileFILE {
+private:
+    struct CleanUp {
+
+        std::string path;
+
+        bool fatal_path = false;
+
+        bool detached = false;
+
+        FILE* fd;
+
+        CleanUp();
+
+        bool is_valid() const;
+
+        void detach();
+
+        void reset_fd();
+
+        void reset_path();
+
+        void reset();
+
+        ~CleanUp();
+    };
+
+    std::shared_ptr<CleanUp> data;
+
+public:
+
+    TempFileFILE();
+    TempFileFILE(const std::string & template_prefix);
+    TempFileFILE(const std::string & dir, const std::string & template_prefix);
+
+    bool is_valid() const;
+
+    bool construct(const std::string & template_prefix);
+    bool construct(const std::string & dir, const std::string & template_prefix);
+
+    const std::string & get_path() const;
+
+    TempFileFILE & detach();
+
+    FILE* get_handle() const;
+    
+    TempFileFILE & reset();
+
+    TempFile toHandle();
+    TempFileFD toFD();
+    friend TempFile;
+    friend TempFileFD;
 };
 
 #endif
