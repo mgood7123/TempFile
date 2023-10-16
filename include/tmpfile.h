@@ -52,6 +52,8 @@ private:
 
 public:
 
+    static const char * TempDir();
+
     TempFile();
     TempFile(const std::string & template_prefix);
     TempFile(const std::string & dir, const std::string & template_prefix);

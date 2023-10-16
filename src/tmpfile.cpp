@@ -143,6 +143,44 @@ struct SaveError {
     }
 };
 
+const char * TempFile::TempDir() {
+#ifdef _WIN32
+    char tmp_dir[MAX_PATH];
+    std::memset(tmp_dir, 0, MAX_PATH);
+    DWORD rp = GetTempPathA(MAX_PATH, tmp_dir);
+    if (rp > MAX_PATH || rp == 0) {
+        // failed to get temporary path
+        // it is reasonable to assume subsequent attempts to obtain the path will fail until fixed by user
+        return false;
+    }
+#else
+    /*
+        ISO/IEC 9945 (POSIX): The path supplied by the first environment variable found in the list
+        TMPDIR, TMP, TEMP, TEMPDIR.
+        
+        If none of these are found, "/tmp", or, if macro __ANDROID__ is defined, "/data/local/tmp"
+    */
+    const char * tmp_dir = getenv("TMPDIR");
+    if (tmp_dir == nullptr) {
+        tmp_dir = getenv("TMP");
+        if (tmp_dir == nullptr) {
+            tmp_dir = getenv("TEMP");
+            if (tmp_dir == nullptr) {
+                tmp_dir = getenv("TEMPDIR");
+                if (tmp_dir == nullptr) {
+#ifdef __ANDROID__
+                    tmp_dir = "/data/local/tmp";
+#else
+                    tmp_dir = "/tmp";
+#endif
+                }
+            }
+        }
+    }
+#endif
+    return tmp_dir;
+}
+
 TempFile::CleanUp::CleanUp() {
 #ifdef _WIN32
     fd = INVALID_HANDLE_VALUE;
@@ -247,42 +285,7 @@ bool TempFile::construct(const std::string & template_prefix, bool log_create_cl
         // return true if we are already set-up
         return true;
     }
-
-#ifdef _WIN32
-    char tmp_dir[MAX_PATH];
-    std::memset(tmp_dir, 0, MAX_PATH);
-    DWORD rp = GetTempPathA(MAX_PATH, tmp_dir);
-    if (rp > MAX_PATH || rp == 0) {
-        // failed to get temporary path
-        // it is reasonable to assume subsequent attempts to obtain the path will fail until fixed by user
-        return false;
-    }
-#else
-    /*
-        ISO/IEC 9945 (POSIX): The path supplied by the first environment variable found in the list
-        TMPDIR, TMP, TEMP, TEMPDIR.
-        
-        If none of these are found, "/tmp", or, if macro __ANDROID__ is defined, "/data/local/tmp"
-    */
-    const char * tmp_dir = getenv("TMPDIR");
-    if (tmp_dir == nullptr) {
-        tmp_dir = getenv("TMP");
-        if (tmp_dir == nullptr) {
-            tmp_dir = getenv("TEMP");
-            if (tmp_dir == nullptr) {
-                tmp_dir = getenv("TEMPDIR");
-                if (tmp_dir == nullptr) {
-#ifdef __ANDROID__
-                    tmp_dir = "/data/local/tmp";
-#else
-                    tmp_dir = "/tmp";
-#endif
-                }
-            }
-        }
-    }
-#endif
-    return construct(tmp_dir, template_prefix, log_create_close);
+    return construct(TempFile::TempDir(), template_prefix);
 }
 
 #include <random>
@@ -654,41 +657,7 @@ bool TempFileFD::construct(const std::string & template_prefix) {
         return true;
     }
 
-#ifdef _WIN32
-    char tmp_dir[MAX_PATH];
-    std::memset(tmp_dir, 0, MAX_PATH);
-    DWORD rp = GetTempPathA(MAX_PATH, tmp_dir);
-    if (rp > MAX_PATH || rp == 0) {
-        // failed to get temporary path
-        // it is reasonable to assume subsequent attempts to obtain the path will fail until fixed by user
-        return false;
-    }
-#else
-    /*
-        ISO/IEC 9945 (POSIX): The path supplied by the first environment variable found in the list
-        TMPDIR, TMP, TEMP, TEMPDIR.
-        
-        If none of these are found, "/tmp", or, if macro __ANDROID__ is defined, "/data/local/tmp"
-    */
-    const char * tmp_dir = getenv("TMPDIR");
-    if (tmp_dir == nullptr) {
-        tmp_dir = getenv("TMP");
-        if (tmp_dir == nullptr) {
-            tmp_dir = getenv("TEMP");
-            if (tmp_dir == nullptr) {
-                tmp_dir = getenv("TEMPDIR");
-                if (tmp_dir == nullptr) {
-#ifdef __ANDROID__
-                    tmp_dir = "/data/local/tmp";
-#else
-                    tmp_dir = "/tmp";
-#endif
-                }
-            }
-        }
-    }
-#endif
-    return construct(tmp_dir, template_prefix);
+    return construct(TempFile::TempDir(), template_prefix);
 }
 
 bool TempFileFD::construct(const std::string & dir, const std::string & template_prefix) {
@@ -933,41 +902,7 @@ bool TempFileFILE::construct(const std::string & template_prefix) {
         return true;
     }
 
-#ifdef _WIN32
-    char tmp_dir[MAX_PATH];
-    std::memset(tmp_dir, 0, MAX_PATH);
-    DWORD rp = GetTempPathA(MAX_PATH, tmp_dir);
-    if (rp > MAX_PATH || rp == 0) {
-        // failed to get temporary path
-        // it is reasonable to assume subsequent attempts to obtain the path will fail until fixed by user
-        return false;
-    }
-#else
-    /*
-        ISO/IEC 9945 (POSIX): The path supplied by the first environment variable found in the list
-        TMPDIR, TMP, TEMP, TEMPDIR.
-        
-        If none of these are found, "/tmp", or, if macro __ANDROID__ is defined, "/data/local/tmp"
-    */
-    const char * tmp_dir = getenv("TMPDIR");
-    if (tmp_dir == nullptr) {
-        tmp_dir = getenv("TMP");
-        if (tmp_dir == nullptr) {
-            tmp_dir = getenv("TEMP");
-            if (tmp_dir == nullptr) {
-                tmp_dir = getenv("TEMPDIR");
-                if (tmp_dir == nullptr) {
-#ifdef __ANDROID__
-                    tmp_dir = "/data/local/tmp";
-#else
-                    tmp_dir = "/tmp";
-#endif
-                }
-            }
-        }
-    }
-#endif
-    return construct(tmp_dir, template_prefix);
+    return construct(TempFile::TempDir(), template_prefix);
 }
 
 bool TempFileFILE::construct(const std::string & dir, const std::string & template_prefix) {
