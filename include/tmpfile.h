@@ -97,6 +97,8 @@ private:
 
         bool detached = false;
 
+        bool log_create_close = false;
+
         int fd;
 
         CleanUp();
@@ -121,11 +123,15 @@ public:
     TempFileFD();
     TempFileFD(const std::string & template_prefix);
     TempFileFD(const std::string & dir, const std::string & template_prefix);
+    TempFileFD(const std::string & template_prefix, bool log_create_close);
+    TempFileFD(const std::string & dir, const std::string & template_prefix, bool log_create_close);
 
     bool is_valid() const;
 
     bool construct(const std::string & template_prefix);
     bool construct(const std::string & dir, const std::string & template_prefix);
+    bool construct(const std::string & template_prefix, bool log_create_close);
+    bool construct(const std::string & dir, const std::string & template_prefix, bool log_create_close);
 
     const std::string & get_path() const;
 
@@ -151,6 +157,8 @@ private:
 
         bool detached = false;
 
+        bool log_create_close = false;
+
         FILE* fd;
 
         CleanUp();
@@ -175,11 +183,15 @@ public:
     TempFileFILE();
     TempFileFILE(const std::string & template_prefix);
     TempFileFILE(const std::string & dir, const std::string & template_prefix);
+    TempFileFILE(const std::string & template_prefix, bool log_create_close);
+    TempFileFILE(const std::string & dir, const std::string & template_prefix, bool log_create_close);
 
     bool is_valid() const;
 
     bool construct(const std::string & template_prefix);
     bool construct(const std::string & dir, const std::string & template_prefix);
+    bool construct(const std::string & template_prefix, bool log_create_close);
+    bool construct(const std::string & dir, const std::string & template_prefix, bool log_create_close);
 
     const std::string & get_path() const;
 
