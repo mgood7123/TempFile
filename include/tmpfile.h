@@ -57,7 +57,6 @@ public:
     TempFile();
     TempFile(const std::string & template_prefix);
     TempFile(const std::string & dir, const std::string & template_prefix);
-
     TempFile(const std::string & template_prefix, bool log_create_close);
     TempFile(const std::string & dir, const std::string & template_prefix, bool log_create_close);
 
@@ -65,9 +64,14 @@ public:
 
     bool construct(const std::string & template_prefix);
     bool construct(const std::string & dir, const std::string & template_prefix);
-
     bool construct(const std::string & template_prefix, bool log_create_close);
     bool construct(const std::string & dir, const std::string & template_prefix, bool log_create_close);
+
+    // pointers are implicitly convertable to bool
+    inline TempFile(const std::string & dir, char * template_prefix) : TempFile(dir, std::string(template_prefix)) {}
+    inline TempFile(const std::string & dir, const char * template_prefix) : TempFile(dir, std::string(template_prefix)) {}
+    inline bool construct(const std::string & dir, char * template_prefix) { return construct(dir, std::string(template_prefix)); }
+    inline bool construct(const std::string & dir, const char * template_prefix) { return construct(dir, std::string(template_prefix)); }
 
     const std::string & get_path() const;
 
@@ -133,6 +137,12 @@ public:
     bool construct(const std::string & template_prefix, bool log_create_close);
     bool construct(const std::string & dir, const std::string & template_prefix, bool log_create_close);
 
+    // pointers are implicitly convertable to bool
+    inline TempFileFD(const std::string & dir, char * template_prefix) : TempFileFD(dir, std::string(template_prefix)) {}
+    inline TempFileFD(const std::string & dir, const char * template_prefix) : TempFileFD(dir, std::string(template_prefix)) {}
+    inline bool construct(const std::string & dir, char * template_prefix) { return construct(dir, std::string(template_prefix)); }
+    inline bool construct(const std::string & dir, const char * template_prefix) { return construct(dir, std::string(template_prefix)); }
+
     const std::string & get_path() const;
 
     TempFileFD & detach();
@@ -192,6 +202,12 @@ public:
     bool construct(const std::string & dir, const std::string & template_prefix);
     bool construct(const std::string & template_prefix, bool log_create_close);
     bool construct(const std::string & dir, const std::string & template_prefix, bool log_create_close);
+
+    // pointers are implicitly convertable to bool
+    inline TempFileFILE(const std::string & dir, char * template_prefix) : TempFileFILE(dir, std::string(template_prefix)) {}
+    inline TempFileFILE(const std::string & dir, const char * template_prefix) : TempFileFILE(dir, std::string(template_prefix)) {}
+    inline bool construct(const std::string & dir, char * template_prefix) { return construct(dir, std::string(template_prefix)); }
+    inline bool construct(const std::string & dir, const char * template_prefix) { return construct(dir, std::string(template_prefix)); }
 
     const std::string & get_path() const;
 
