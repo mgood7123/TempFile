@@ -954,6 +954,14 @@ bool TempFileFILE::construct(const std::string & template_prefix) {
     return construct(TempFile::TempDir(), template_prefix);
 }
 
+bool TempFileFILE::construct(const std::string & template_prefix, bool log_create_close) {
+    if (this->data->is_valid()) {
+        // return true if we are already set-up
+        return true;
+    }
+    return construct(TempFile::TempDir(), template_prefix, log_create_close);
+}
+
 bool TempFileFILE::construct(const std::string & dir, const std::string & template_prefix) {
     return construct(dir, template_prefix, false);
 }
