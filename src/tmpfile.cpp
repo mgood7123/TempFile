@@ -248,46 +248,6 @@ TempFile::CleanUp::~CleanUp() {
     reset();
 }
 
-TempFile::TempFile() {
-    data = std::make_shared<CleanUp>();
-}
-
-TempFile::TempFile(const std::string & template_prefix) {
-    data = std::make_shared<CleanUp>();
-    construct(template_prefix);
-}
-
-TempFile::TempFile(const std::string & dir, const std::string & template_prefix) {
-    data = std::make_shared<CleanUp>();
-    construct(dir, template_prefix);
-}
-
-TempFile::TempFile(const std::string & template_prefix, bool log_create_close) {
-    data = std::make_shared<CleanUp>();
-    construct(template_prefix, log_create_close);
-}
-
-TempFile::TempFile(const std::string & dir, const std::string & template_prefix, bool log_create_close) {
-    data = std::make_shared<CleanUp>();
-    construct(dir, template_prefix, log_create_close);
-}
-
-bool TempFile::is_valid() const {
-    return this->data->is_valid();
-}
-
-bool TempFile::construct(const std::string & template_prefix) {
-    return construct(template_prefix, false);
-}
-
-bool TempFile::construct(const std::string & template_prefix, bool log_create_close) {
-    if (this->data->is_valid()) {
-        // return true if we are already set-up
-        return true;
-    }
-    return construct(TempFile::TempDir(), template_prefix, log_create_close);
-}
-
 #include <random>
 #include <functional> // std::hash
 #include <chrono> // epoch
@@ -407,11 +367,91 @@ std::mt19937_64& rng() {
 
 #define LETTER_DIST letters[std::uniform_int_distribution<> dist {0, NUM_LETTERS-1} (rng())]
 
+TempFile::TempFile() {
+    data = std::make_shared<CleanUp>();
+}
+
+TempFile::TempFile(const std::string & template_prefix) {
+    data = std::make_shared<CleanUp>();
+    construct(template_prefix);
+}
+
+TempFile::TempFile(const std::string & dir, const std::string & template_prefix) {
+    data = std::make_shared<CleanUp>();
+    construct(dir, template_prefix);
+}
+
+TempFile::TempFile(const std::string & template_prefix, bool log_create_close) {
+    data = std::make_shared<CleanUp>();
+    construct(template_prefix, log_create_close);
+}
+
+TempFile::TempFile(const std::string & dir, const std::string & template_prefix, bool log_create_close) {
+    data = std::make_shared<CleanUp>();
+    construct(dir, template_prefix, log_create_close);
+}
+
+TempFile::TempFile(const std::string & template_prefix, const std::string & template_suffix) {
+    data = std::make_shared<CleanUp>();
+    construct(template_prefix, template_suffix);
+}
+
+TempFile::TempFile(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix) {
+    data = std::make_shared<CleanUp>();
+    construct(dir, template_prefix, template_suffix);
+}
+
+TempFile::TempFile(const std::string & template_prefix, const std::string & template_suffix, bool log_create_close) {
+    data = std::make_shared<CleanUp>();
+    construct(template_prefix, template_suffix, log_create_close);
+}
+
+TempFile::TempFile(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix, bool log_create_close) {
+    data = std::make_shared<CleanUp>();
+    construct(dir, template_prefix, template_suffix, log_create_close);
+}
+
+bool TempFile::is_valid() const {
+    return this->data->is_valid();
+}
+
+bool TempFile::construct(const std::string & template_prefix) {
+    return construct(template_prefix, false);
+}
+
+bool TempFile::construct(const std::string & template_prefix, bool log_create_close) {
+    if (this->data->is_valid()) {
+        // return true if we are already set-up
+        return true;
+    }
+    return construct(TempFile::TempDir(), template_prefix, log_create_close);
+}
+
+bool TempFile::construct(const std::string & template_prefix, const std::string & template_suffix) {
+    return construct(template_prefix, template_suffix, false);
+}
+
+bool TempFile::construct(const std::string & template_prefix, const std::string & template_suffix, bool log_create_close) {
+    if (this->data->is_valid()) {
+        // return true if we are already set-up
+        return true;
+    }
+    return construct(TempFile::TempDir(), template_prefix, template_suffix, log_create_close);
+}
+
 bool TempFile::construct(const std::string & dir, const std::string & template_prefix) {
     return construct(dir, template_prefix, false);
 }
 
 bool TempFile::construct(const std::string & dir, const std::string & template_prefix, bool log_create_close) {
+    return construct(dir, template_prefix, "", log_create_close);
+}
+
+bool TempFile::construct(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix) {
+    return construct(dir, template_prefix, template_suffix, false);
+}
+
+bool TempFile::construct(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix, bool log_create_close) {
     if (dir.length() == 0) {
         return construct(template_prefix, log_create_close);
     }
@@ -435,9 +475,10 @@ bool TempFile::construct(const std::string & dir, const std::string & template_p
     path += "/";
     path += template_prefix;
     path += "XXXXXX";
-    char * XXXXXX = &path[path.length()-6];
+    path += template_suffix;
 
 #ifdef _WIN32
+    char * XXXXXX = &path[path.length()-template_suffix.length()-6];
 
     // based on
     // https://github.com/wbx-github/uclibc-ng/blob/master/libc/misc/internals/tempname.c#L166
@@ -528,7 +569,7 @@ bool TempFile::construct(const std::string & dir, const std::string & template_p
 
         return false;
 #else
-        this->data->fd = mkstemp(&path[0]);
+        this->data->fd = mkstemps(&path[0], template_suffix.length());
 
         if (this->data->fd < 0) {
             if (this->data->fd == -1) {
@@ -664,6 +705,26 @@ TempFileFD::TempFileFD(const std::string & dir, const std::string & template_pre
     construct(dir, template_prefix, log_create_close);
 }
 
+TempFileFD::TempFileFD(const std::string & template_prefix, const std::string & template_suffix) {
+    data = std::make_shared<CleanUp>();
+    construct(template_prefix, template_suffix);
+}
+
+TempFileFD::TempFileFD(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix) {
+    data = std::make_shared<CleanUp>();
+    construct(dir, template_prefix, template_suffix);
+}
+
+TempFileFD::TempFileFD(const std::string & template_prefix, const std::string & template_suffix, bool log_create_close) {
+    data = std::make_shared<CleanUp>();
+    construct(template_prefix, template_suffix, log_create_close);
+}
+
+TempFileFD::TempFileFD(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix, bool log_create_close) {
+    data = std::make_shared<CleanUp>();
+    construct(dir, template_prefix, template_suffix, log_create_close);
+}
+
 bool TempFileFD::is_valid() const {
     return this->data->is_valid();
 }
@@ -677,7 +738,19 @@ bool TempFileFD::construct(const std::string & template_prefix, bool log_create_
         // return true if we are already set-up
         return true;
     }
-    return construct(TempFile::TempDir(), template_prefix, log_create_close);
+    return construct(TempFileFD::TempDir(), template_prefix, log_create_close);
+}
+
+bool TempFileFD::construct(const std::string & template_prefix, const std::string & template_suffix) {
+    return construct(template_prefix, template_suffix, false);
+}
+
+bool TempFileFD::construct(const std::string & template_prefix, const std::string & template_suffix, bool log_create_close) {
+    if (this->data->is_valid()) {
+        // return true if we are already set-up
+        return true;
+    }
+    return construct(TempFileFD::TempDir(), template_prefix, template_suffix, log_create_close);
 }
 
 bool TempFileFD::construct(const std::string & dir, const std::string & template_prefix) {
@@ -685,6 +758,14 @@ bool TempFileFD::construct(const std::string & dir, const std::string & template
 }
 
 bool TempFileFD::construct(const std::string & dir, const std::string & template_prefix, bool log_create_close) {
+    return construct(dir, template_prefix, "", log_create_close);
+}
+
+bool TempFileFD::construct(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix) {
+    return construct(dir, template_prefix, template_suffix, false);
+}
+
+bool TempFileFD::construct(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix, bool log_create_close) {
     if (dir.length() == 0) {
         return construct(template_prefix, log_create_close);
     }
@@ -708,9 +789,10 @@ bool TempFileFD::construct(const std::string & dir, const std::string & template
     path += "/";
     path += template_prefix;
     path += "XXXXXX";
-    char * XXXXXX = &path[path.length()-6];
+    path += template_suffix;
 
 #ifdef _WIN32
+    char * XXXXXX = &path[path.length()-template_suffix.length()-6];
 
     // based on
     // https://github.com/wbx-github/uclibc-ng/blob/master/libc/misc/internals/tempname.c#L166
@@ -812,7 +894,7 @@ bool TempFileFD::construct(const std::string & dir, const std::string & template
 
         return false;
 #else
-        this->data->fd = mkstemp(&path[0]);
+        this->data->fd = mkstemps(&path[0], template_suffix.length());
 
         if (this->data->fd < 0) {
             if (this->data->fd == -1) {
@@ -941,17 +1023,32 @@ TempFileFILE::TempFileFILE(const std::string & dir, const std::string & template
     construct(dir, template_prefix, log_create_close);
 }
 
+TempFileFILE::TempFileFILE(const std::string & template_prefix, const std::string & template_suffix) {
+    data = std::make_shared<CleanUp>();
+    construct(template_prefix, template_suffix);
+}
+
+TempFileFILE::TempFileFILE(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix) {
+    data = std::make_shared<CleanUp>();
+    construct(dir, template_prefix, template_suffix);
+}
+
+TempFileFILE::TempFileFILE(const std::string & template_prefix, const std::string & template_suffix, bool log_create_close) {
+    data = std::make_shared<CleanUp>();
+    construct(template_prefix, template_suffix, log_create_close);
+}
+
+TempFileFILE::TempFileFILE(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix, bool log_create_close) {
+    data = std::make_shared<CleanUp>();
+    construct(dir, template_prefix, template_suffix, log_create_close);
+}
+
 bool TempFileFILE::is_valid() const {
     return this->data->is_valid();
 }
 
 bool TempFileFILE::construct(const std::string & template_prefix) {
-    if (this->data->is_valid()) {
-        // return true if we are already set-up
-        return true;
-    }
-
-    return construct(TempFile::TempDir(), template_prefix);
+    return construct(template_prefix, false);
 }
 
 bool TempFileFILE::construct(const std::string & template_prefix, bool log_create_close) {
@@ -959,7 +1056,19 @@ bool TempFileFILE::construct(const std::string & template_prefix, bool log_creat
         // return true if we are already set-up
         return true;
     }
-    return construct(TempFile::TempDir(), template_prefix, log_create_close);
+    return construct(TempFileFILE::TempDir(), template_prefix, log_create_close);
+}
+
+bool TempFileFILE::construct(const std::string & template_prefix, const std::string & template_suffix) {
+    return construct(template_prefix, template_suffix, false);
+}
+
+bool TempFileFILE::construct(const std::string & template_prefix, const std::string & template_suffix, bool log_create_close) {
+    if (this->data->is_valid()) {
+        // return true if we are already set-up
+        return true;
+    }
+    return construct(TempFileFILE::TempDir(), template_prefix, template_suffix, log_create_close);
 }
 
 bool TempFileFILE::construct(const std::string & dir, const std::string & template_prefix) {
@@ -967,6 +1076,14 @@ bool TempFileFILE::construct(const std::string & dir, const std::string & templa
 }
 
 bool TempFileFILE::construct(const std::string & dir, const std::string & template_prefix, bool log_create_close) {
+    return construct(dir, template_prefix, "", log_create_close);
+}
+
+bool TempFileFILE::construct(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix) {
+    return construct(dir, template_prefix, template_suffix, false);
+}
+
+bool TempFileFILE::construct(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix, bool log_create_close) {
     if (dir.length() == 0) {
         return construct(template_prefix, log_create_close);
     }
@@ -990,9 +1107,10 @@ bool TempFileFILE::construct(const std::string & dir, const std::string & templa
     path += "/";
     path += template_prefix;
     path += "XXXXXX";
-    char * XXXXXX = &path[path.length()-6];
+    path += template_suffix;
 
 #ifdef _WIN32
+    char * XXXXXX = &path[path.length()-template_suffix.length()-6];
 
     // based on
     // https://github.com/wbx-github/uclibc-ng/blob/master/libc/misc/internals/tempname.c#L166
@@ -1103,7 +1221,7 @@ bool TempFileFILE::construct(const std::string & dir, const std::string & templa
 
         return false;
 #else
-        int fd = mkstemp(&path[0]);
+        int fd = mkstemps(&path[0], template_suffix.length());
 
         if (fd < 0) {
             if (fd == -1) {
