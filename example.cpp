@@ -10,7 +10,7 @@ struct TmpFileHolder {
     std::vector<std::pair<std::string, TempFile>> files;
 
     void file(const std::string & id, const std::string & name) {
-        files.push_back(std::pair<std::string, TempFile>(id, TempFile(name)));
+        files.push_back(std::pair<std::string, TempFile>(id, TempFile("", name)));
     }
 
     void dir(const std::string & id, const std::string & dir, const std::string & name) {
