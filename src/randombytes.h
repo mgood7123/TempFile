@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-#ifdef _WIN32
+#if defined(_WIN32)
 /* Load size_t on windows */
 #include <crtdefs.h>
 #else

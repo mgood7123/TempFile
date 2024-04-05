@@ -1,14 +1,16 @@
 // In the case that are compiling on linux, we need to define _GNU_SOURCE
 // *before* randombytes.h is included. Otherwise SYS_getrandom will not be
 // declared.
-#if defined(__linux__) || defined(__GNU__)
+#if defined(__MSYS__) || defined(__linux__) || defined(__GNU__)
 # define _GNU_SOURCE
-#endif /* defined(__linux__) || defined(__GNU__) */
+#endif /* defined(__MSYS__) || defined(__linux__) || defined(__GNU__) */
 
 #include "randombytes.h"
 
 #if defined(_WIN32)
 /* Windows */
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 # include <windows.h>
 # include <wincrypt.h> /* CryptAcquireContext, CryptGenRandom */
 #endif /* defined(_WIN32) */
@@ -23,7 +25,7 @@
 # define GNU_KFREEBSD
 #endif
 
-#if defined(__linux__) || defined(__GNU__) || defined(GNU_KFREEBSD)
+#if defined(__MSYS__) || defined(__linux__) || defined(__GNU__) || defined(GNU_KFREEBSD)
 /* Linux */
 // We would need to include <linux/random.h>, but not every target has access
 // to the linux headers. We only need RNDGETENTCNT, so we instead inline it.
@@ -41,9 +43,13 @@
 # if (defined(__linux__) || defined(__GNU__)) && defined(__GLIBC__) && ((__GLIBC__ > 2) || (__GLIBC_MINOR__ > 24))
 #  define USE_GLIBC
 #  include <sys/random.h>
+# elif defined(__MSYS__)
+#  include <sys/random.h>
 # endif /* (defined(__linux__) || defined(__GNU__)) && defined(__GLIBC__) && ((__GLIBC__ > 2) || (__GLIBC_MINOR__ > 24)) */
 # include <sys/stat.h>
-# include <sys/syscall.h>
+# if !defined(__MSYS__)
+#  include <sys/syscall.h>
+# endif
 # include <sys/types.h>
 # include <unistd.h>
 
@@ -52,7 +58,7 @@
 #  define SSIZE_MAX (SIZE_MAX / 2 - 1)
 # endif /* defined(SSIZE_MAX) */
 
-#endif /* defined(__linux__) || defined(__GNU__) || defined(GNU_KFREEBSD) */
+#endif /* defined(__MSYS__) || defined(__linux__) || defined(__GNU__) || defined(GNU_KFREEBSD) */
 
 
 #if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
@@ -109,9 +115,9 @@ static int randombytes_wasi_randombytes(void *buf, size_t n) {
 }
 #endif /* defined(__wasi__) */
 
-#if (defined(__linux__) || defined(__GNU__)) && (defined(USE_GLIBC) || defined(SYS_getrandom))
-# if defined(USE_GLIBC)
-// getrandom is declared in glibc.
+#if (defined(__MSYS__)) || ((defined(__linux__) || defined(__GNU__)) && (defined(USE_GLIBC) || defined(SYS_getrandom)))
+# if defined(USE_GLIBC) || defined(__MSYS__)
+// getrandom is declared in glibc.and msys
 # elif defined(SYS_getrandom)
 static ssize_t getrandom(void *buf, size_t buflen, unsigned int flags) {
 	return syscall(SYS_getrandom, buf, buflen, flags);
@@ -139,7 +145,7 @@ static int randombytes_linux_randombytes_getrandom(void *buf, size_t n)
 	assert(n == 0);
 	return 0;
 }
-#endif /* (defined(__linux__) || defined(__GNU__)) && (defined(USE_GLIBC) || defined(SYS_getrandom)) */
+#endif /* (defined(__MSYS__)) || ((defined(__linux__) || defined(__GNU__)) && (defined(USE_GLIBC) || defined(SYS_getrandom))) */
 
 #if (defined(__linux__) || defined(GNU_KFREEBSD)) && !defined(SYS_getrandom)
 
@@ -330,8 +336,8 @@ int randombytes(void *buf, size_t n)
 #if defined(__EMSCRIPTEN__)
 # pragma message("Using crypto api from NodeJS")
 	return randombytes_js_randombytes_nodejs(buf, n);
-#elif defined(__linux__) || defined(__GNU__) || defined(GNU_KFREEBSD)
-# if defined(USE_GLIBC)
+#elif defined(__MSYS__) || defined(__linux__) || defined(__GNU__) || defined(GNU_KFREEBSD)
+# if defined(USE_GLIBC) || defined(__MSYS__)
 #  pragma message("Using getrandom function call")
 	/* Use getrandom system call */
 	return randombytes_linux_randombytes_getrandom(buf, n);

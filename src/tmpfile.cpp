@@ -1,72 +1,31 @@
+#include <tmpfile/tmpfile.h>
+
 #include <limits.h> // CHAR_BIT
 
 #include <iostream>
 
-// sanity check
-#if CHAR_BIT != 8
-#error system does not support 8 bit addressing
-#endif
-
-#include <tmpfile.h>
-
-#ifdef _WIN32
-/* Load size_t on windows */
+#if defined(_WIN32)
 #include <crtdefs.h>
+#include <io.h>
+#include <fcntl.h>
 #else
 #include <unistd.h>
-#endif /* _WIN32 */
+#endif /* defined(_WIN32) */
 
 #include <string>
 
-/*
- * Write `n` bytes of high quality random bytes to `buf`
- */
-extern "C" int randombytes(void *buf, size_t n);
-
-#ifdef _WIN32
-
-#include <time.h>
-#include <errno.h>
-
+#if defined(_WIN32)
 /* These are the characters used in temporary filenames.  */
 static const char letters[] =
 "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 #define NUM_LETTERS (62)
 
-int gettimeofday(struct timeval_64_t *spec)
-{
-    __int64 wintime;
-    GetSystemTimeAsFileTime((FILETIME*)&wintime);
-    wintime      -=116444736000000000i64;  //1jan1601 to 1jan1970
-    spec->tv_sec  =wintime / 10000000i64;  //seconds
-    spec->tv_usec =wintime % 10000000i64;  //milli-seconds
-    return 0;
+static inline int LETTER_ID() {
+    static std::uniform_int_distribution<int> dist{ 0, NUM_LETTERS - 1 };
+    return dist(rng());
 }
 
-static void brain_damaged_fillrand(unsigned std::string &buf, unsigned int len)
-{
-    unsigned int i, k;
-    struct timeval_64_t tv;
-    uint32_t high, low, rh;
-    static uint64_t value;
-    gettimeofday(&tv);
-    value += ((uint64_t) tv.tv_usec << 16) ^ tv.tv_sec ^ GetCurrentProcessId();
-    low = value & UINT32_MAX;
-    high = value >> 32;
-    for (i = 0; i < len; ++i) {
-        rh = high % NUM_LETTERS;
-        high /= NUM_LETTERS;
-#define _L ((UINT32_MAX % NUM_LETTERS + 1) % NUM_LETTERS)
-        k = (low % NUM_LETTERS) + (_L * rh);
-#undef _L
-#define _H ((UINT32_MAX / NUM_LETTERS) + ((UINT32_MAX % NUM_LETTERS + 1) / NUM_LETTERS))
-        low = (low / NUM_LETTERS) + (_H * rh) + (k / NUM_LETTERS);
-#undef _H
-        k %= NUM_LETTERS;
-        buf[i] = letters[k];
-    }
-}
-
+#define LETTER_DIST letters[LETTER_ID()]
 #else
 #include <string.h> // strdup
 #include <stdlib.h> // free
@@ -75,7 +34,7 @@ static void brain_damaged_fillrand(unsigned std::string &buf, unsigned int len)
 struct SaveError {
     bool reset_errno = true;
     int errno_;
-#ifdef _WIN32
+#if defined(_WIN32)
     bool reset_last_error = true;
     int last_error;
 #endif
@@ -83,7 +42,7 @@ struct SaveError {
     SaveError()
     {
         set_errno();
-#ifdef _WIN32
+#if defined(_WIN32)
         set_last_error();
 #endif
     }
@@ -104,7 +63,7 @@ struct SaveError {
         return errno_;
     }
 
-    #ifdef _WIN32
+    #if defined(_WIN32)
     void set_last_error() {
         // preserve errno in case the user calls set_errno after
         int e = errno;
@@ -134,7 +93,7 @@ struct SaveError {
     }
 
     ~SaveError() {
-        #ifdef _WIN32
+        #if defined(_WIN32)
         if (reset_last_error)
             SetLastError(last_error);
         #endif
@@ -143,16 +102,22 @@ struct SaveError {
     }
 };
 
-const char * TempFile::TempDir() {
-#ifdef _WIN32
-    char tmp_dir[MAX_PATH];
-    std::memset(tmp_dir, 0, MAX_PATH);
+std::string TempFile::TempDir() {
+#if defined(_WIN32)
+    char * tmp_dir = (char*)calloc(1, MAX_PATH+1);
+    if (tmp_dir == nullptr) {
+        throw std::bad_alloc();
+    }
     DWORD rp = GetTempPathA(MAX_PATH, tmp_dir);
     if (rp > MAX_PATH || rp == 0) {
+        free(tmp_dir);
         // failed to get temporary path
         // it is reasonable to assume subsequent attempts to obtain the path will fail until fixed by user
-        return false;
+        return "";
     }
+    std::string t = tmp_dir;
+    free(tmp_dir);
+    return t;
 #else
     /*
         ISO/IEC 9945 (POSIX): The path supplied by the first environment variable found in the list
@@ -177,12 +142,12 @@ const char * TempFile::TempDir() {
             }
         }
     }
-#endif
     return tmp_dir;
+#endif
 }
 
 TempFile::CleanUp::CleanUp() {
-#ifdef _WIN32
+#if defined(_WIN32)
     fd = INVALID_HANDLE_VALUE;
 #else
     fd = -1;
@@ -191,7 +156,7 @@ TempFile::CleanUp::CleanUp() {
 
 bool TempFile::CleanUp::is_valid() const {
     return
-#ifdef _WIN32
+#if defined(_WIN32)
     fd != INVALID_HANDLE_VALUE
 #else
     fd >= 0
@@ -204,7 +169,7 @@ void TempFile::CleanUp::detach() {
 }
 
 void TempFile::CleanUp::reset_fd() {
-#ifdef _WIN32
+#if defined(_WIN32)
     if (fd != INVALID_HANDLE_VALUE) {
         SaveError e;
         if (!detached) CloseHandle(fd);
@@ -229,7 +194,7 @@ void TempFile::CleanUp::reset_path() {
                 std::cout << "deleting temporary file: " << path << std::endl;
             }
         }
-#ifdef _WIN32
+#if defined(_WIN32)
         if (!detached) DeleteFile(path.c_str());
 #else
         if (!detached) unlink(path.c_str());
@@ -254,10 +219,15 @@ TempFile::CleanUp::~CleanUp() {
 #include <iostream>
 #include <iterator>
 
-static char * rng_get_fallback_buf() {
+static char* rng_get_fallback_buf() {
     static char buf[1];
     return buf;
 }
+
+/*
+ * Write `n` bytes of high quality random bytes to `buf`
+ */
+extern "C" int randombytes(void* buf, size_t n);
 
 static int rng_get_fallback() {
     static auto unused = randombytes(rng_get_fallback_buf(), sizeof(char));
@@ -269,7 +239,8 @@ static auto rng_get() {
     if (r == 0) {
         static int r2 = rng_get_fallback();
         return r2 == 0 ? 1 : r2;
-    } else {
+    }
+    else {
         return r;
     }
 }
@@ -279,7 +250,7 @@ static void * get_stack_var() {
     return std::addressof(foo);
 }
 
-// static initialization order is unspecified, use macros to garentee order
+// static initialization order is unspecified, use macros to guarantee order
 using SEED_TYPE = long unsigned int;
 
 template <typename H>
@@ -354,18 +325,15 @@ class SeedList
 };
 
 
-// 1 mutation is sufficent to generate a randomized seed
+// 1 mutation is sufficient to generate a randomized seed
 //   for all seed components as long as one component contains true randomness
 //  however we can mutate more times if needed
 
-
-std::mt19937_64& rng() {
+static inline std::mt19937_64& rng() {
     static SeedList seq_list;
     static std::mt19937_64 rng_ {seq_list.get(1, seed)};
     return rng_;
 }
-
-#define LETTER_DIST letters[std::uniform_int_distribution<> dist {0, NUM_LETTERS-1} (rng())]
 
 TempFile::TempFile() {
     data = std::make_shared<CleanUp>();
@@ -409,7 +377,7 @@ bool TempFile::construct(const std::string & dir, const std::string & template_p
 
 bool TempFile::construct(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix, bool log_create_close) {
     if (dir.length() == 0) {
-        return construct(TempDir(), template_prefix, log_create_close);
+        return construct(TempDir(), template_prefix, template_suffix, log_create_close);
     }
 
     if (this->data->is_valid()) {
@@ -433,7 +401,7 @@ bool TempFile::construct(const std::string & dir, const std::string & template_p
     path += "XXXXXX";
     path += template_suffix;
 
-#ifdef _WIN32
+#if defined(_WIN32)
     char * XXXXXX = &path[path.length()-template_suffix.length()-6];
 
     // based on
@@ -460,7 +428,7 @@ bool TempFile::construct(const std::string & dir, const std::string & template_p
         // if we are invalid we need to clean up and try again
         this->data->reset();
 
-#ifdef _WIN32
+#if defined(_WIN32)
 
 #ifndef TMP_MAX
 #define TMP_MAX 238328
@@ -568,7 +536,7 @@ TempFile & TempFile::detach() {
     return *this;
 }
 
-#ifdef _WIN32
+#if defined(_WIN32)
 HANDLE
 #else
 int
@@ -599,7 +567,7 @@ void TempFileFD::CleanUp::detach() {
 void TempFileFD::CleanUp::reset_fd() {
     if (fd >= 0) {
         SaveError e;
-#ifdef _WIN32
+#if defined(_WIN32)
         if (!detached) _close(fd);
 #else
         if (!detached) close(fd);
@@ -618,7 +586,7 @@ void TempFileFD::CleanUp::reset_path() {
                 std::cout << "deleting temporary file: " << path << std::endl;
             }
         }
-#ifdef _WIN32
+#if defined(_WIN32)
         if (!detached) DeleteFile(path.c_str());
 #else
         if (!detached) unlink(path.c_str());
@@ -679,7 +647,7 @@ bool TempFileFD::construct(const std::string & dir, const std::string & template
 
 bool TempFileFD::construct(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix, bool log_create_close) {
     if (dir.length() == 0) {
-        return construct(TempDir(), template_prefix, log_create_close);
+        return construct(TempDir(), template_prefix, template_suffix, log_create_close);
     }
 
     if (this->data->is_valid()) {
@@ -703,7 +671,7 @@ bool TempFileFD::construct(const std::string & dir, const std::string & template
     path += "XXXXXX";
     path += template_suffix;
 
-#ifdef _WIN32
+#if defined(_WIN32)
     char * XXXXXX = &path[path.length()-template_suffix.length()-6];
 
     // based on
@@ -730,7 +698,7 @@ bool TempFileFD::construct(const std::string & dir, const std::string & template
         // if we are invalid we need to clean up and try again
         this->data->reset();
 
-#ifdef _WIN32
+#if defined(_WIN32)
 
 #ifndef TMP_MAX
 #define TMP_MAX 238328
@@ -892,7 +860,7 @@ void TempFileFILE::CleanUp::reset_path() {
                 std::cout << "deleting temporary file: " << path << std::endl;
             }
         }
-#ifdef _WIN32
+#if defined(_WIN32)
         if (!detached) DeleteFile(path.c_str());
 #else
         if (!detached) unlink(path.c_str());
@@ -911,50 +879,110 @@ TempFileFILE::CleanUp::~CleanUp() {
     reset();
 }
 
-TempFileFILE::TempFileFILE() {
-    data = std::make_shared<CleanUp>();
-}
-
-TempFileFILE::TempFileFILE(const std::string & dir, const std::string & template_prefix) {
-    data = std::make_shared<CleanUp>();
-    construct(dir, template_prefix);
-}
-
-TempFileFILE::TempFileFILE(const std::string & dir, const std::string & template_prefix, bool log_create_close) {
-    data = std::make_shared<CleanUp>();
-    construct(dir, template_prefix, log_create_close);
-}
-
-TempFileFILE::TempFileFILE(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix) {
-    data = std::make_shared<CleanUp>();
-    construct(dir, template_prefix, template_suffix);
-}
-
-TempFileFILE::TempFileFILE(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix, bool log_create_close) {
-    data = std::make_shared<CleanUp>();
-    construct(dir, template_prefix, template_suffix, log_create_close);
-}
-
 bool TempFileFILE::is_valid() const {
     return this->data->is_valid();
 }
 
+const char* OPEN_MODE_TO_FILE_MODE(int open_mode) {
+    if ((open_mode & TEMP_FILE_OPEN_MODE_READ) == TEMP_FILE_OPEN_MODE_READ) return "r+";
+    if ((open_mode & TEMP_FILE_OPEN_MODE_WRITE) == TEMP_FILE_OPEN_MODE_WRITE) return "w+";
+    if ((open_mode & TEMP_FILE_OPEN_MODE_READ) == TEMP_FILE_OPEN_MODE_READ && (open_mode & TEMP_FILE_OPEN_MODE_WRITE) == TEMP_FILE_OPEN_MODE_WRITE) return "rw+";
+    if ((open_mode & TEMP_FILE_OPEN_MODE_READ) == TEMP_FILE_OPEN_MODE_READ && (open_mode & TEMP_FILE_OPEN_MODE_BINARY) == TEMP_FILE_OPEN_MODE_BINARY) return "rb+";
+    if ((open_mode & TEMP_FILE_OPEN_MODE_WRITE) == TEMP_FILE_OPEN_MODE_WRITE && (open_mode & TEMP_FILE_OPEN_MODE_BINARY) == TEMP_FILE_OPEN_MODE_BINARY) return "wb+";
+    if ((open_mode & TEMP_FILE_OPEN_MODE_READ) == TEMP_FILE_OPEN_MODE_READ && (open_mode & TEMP_FILE_OPEN_MODE_WRITE) == TEMP_FILE_OPEN_MODE_WRITE && (open_mode & TEMP_FILE_OPEN_MODE_BINARY) == TEMP_FILE_OPEN_MODE_BINARY) return "rwb+";
+    throw std::runtime_error("invalid mode: TEMP_FILE_OPEN_MODE_BINARY cannot be passed by itself");
+}
+
+// generated by gen.exe -- header start
+
+TempFileFILE::TempFileFILE() {
+    data = std::make_shared<CleanUp>();
+
+}
+TempFileFILE::TempFileFILE(const std::string & dir) {
+    data = std::make_shared<CleanUp>();
+    construct(dir);
+}
+TempFileFILE::TempFileFILE(const std::string & dir, const std::string & template_prefix) {
+    data = std::make_shared<CleanUp>();
+    construct(dir, template_prefix);
+}
+TempFileFILE::TempFileFILE(const std::string & dir, const std::string & template_prefix, int open_mode) {
+    data = std::make_shared<CleanUp>();
+    construct(dir, template_prefix, open_mode);
+}
+TempFileFILE::TempFileFILE(const std::string & dir, const std::string & template_prefix, bool log_create_close) {
+    data = std::make_shared<CleanUp>();
+    construct(dir, template_prefix, log_create_close);
+}
+TempFileFILE::TempFileFILE(const std::string & dir, const std::string & template_prefix, int open_mode, bool log_create_close) {
+    data = std::make_shared<CleanUp>();
+    construct(dir, template_prefix, open_mode, log_create_close);
+}
+TempFileFILE::TempFileFILE(const std::string & dir, const std::string & template_prefix, char * template_suffix) {
+    data = std::make_shared<CleanUp>();
+    construct(dir, template_prefix, std::string(template_suffix));
+}
+TempFileFILE::TempFileFILE(const std::string & dir, const std::string & template_prefix, const char * template_suffix) {
+    data = std::make_shared<CleanUp>();
+    construct(dir, template_prefix, std::string(template_suffix));
+}
+TempFileFILE::TempFileFILE(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix) {
+    data = std::make_shared<CleanUp>();
+    construct(dir, template_prefix, template_suffix);
+}
+TempFileFILE::TempFileFILE(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix, int open_mode) {
+    data = std::make_shared<CleanUp>();
+    construct(dir, template_prefix, template_suffix, open_mode);
+}
+TempFileFILE::TempFileFILE(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix, bool log_create_close) {
+    data = std::make_shared<CleanUp>();
+    construct(dir, template_prefix, template_suffix, log_create_close);
+}
+TempFileFILE::TempFileFILE(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix, int open_mode, bool log_create_close) {
+    data = std::make_shared<CleanUp>();
+    construct(dir, template_prefix, template_suffix, open_mode, log_create_close);
+}
+
+bool TempFileFILE::construct() {
+    return construct("", "", "", TEMP_FILE_OPEN_MODE_READ | TEMP_FILE_OPEN_MODE_WRITE, false);
+}
+bool TempFileFILE::construct(const std::string & dir) {
+    return construct(dir, "", "", TEMP_FILE_OPEN_MODE_READ | TEMP_FILE_OPEN_MODE_WRITE, false);
+}
 bool TempFileFILE::construct(const std::string & dir, const std::string & template_prefix) {
-    return construct(dir, template_prefix, "", false);
+    return construct(dir, template_prefix, "", TEMP_FILE_OPEN_MODE_READ | TEMP_FILE_OPEN_MODE_WRITE, false);
 }
-
+bool TempFileFILE::construct(const std::string & dir, const std::string & template_prefix, int open_mode) {
+    return construct(dir, template_prefix, "", open_mode, false);
+}
 bool TempFileFILE::construct(const std::string & dir, const std::string & template_prefix, bool log_create_close) {
-    return construct(dir, template_prefix, "", log_create_close);
+    return construct(dir, template_prefix, "", TEMP_FILE_OPEN_MODE_READ | TEMP_FILE_OPEN_MODE_WRITE, log_create_close);
 }
-
+bool TempFileFILE::construct(const std::string & dir, const std::string & template_prefix, int open_mode, bool log_create_close) {
+    return construct(dir, template_prefix, "", open_mode, log_create_close);
+}
+bool TempFileFILE::construct(const std::string & dir, const std::string & template_prefix, char * template_suffix) {
+    return construct(dir, template_prefix, std::string(template_suffix));
+}
+bool TempFileFILE::construct(const std::string & dir, const std::string & template_prefix, const char * template_suffix) {
+    return construct(dir, template_prefix, std::string(template_suffix));
+}
 bool TempFileFILE::construct(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix) {
-    return construct(dir, template_prefix, template_suffix, false);
+    return construct(dir, template_prefix, template_suffix, TEMP_FILE_OPEN_MODE_READ | TEMP_FILE_OPEN_MODE_WRITE, false);
 }
-
+bool TempFileFILE::construct(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix, int open_mode) {
+    return construct(dir, template_prefix, template_suffix, open_mode, false);
+}
 bool TempFileFILE::construct(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix, bool log_create_close) {
+    return construct(dir, template_prefix, template_suffix, TEMP_FILE_OPEN_MODE_READ | TEMP_FILE_OPEN_MODE_WRITE, log_create_close);
+}
+bool TempFileFILE::construct(const std::string & dir, const std::string & template_prefix, const std::string & template_suffix, int open_mode, bool log_create_close) {
     if (dir.length() == 0) {
-        return construct(TempDir(), template_prefix, log_create_close);
+        return construct(TempDir(), template_prefix, template_suffix, open_mode, log_create_close);
     }
+
+// generated by gen.exe -- header end
 
     if (this->data->is_valid()) {
         // return true if we are already set-up
@@ -977,7 +1005,7 @@ bool TempFileFILE::construct(const std::string & dir, const std::string & templa
     path += "XXXXXX";
     path += template_suffix;
 
-#ifdef _WIN32
+#if defined(_WIN32)
     char * XXXXXX = &path[path.length()-template_suffix.length()-6];
 
     // based on
@@ -1004,7 +1032,7 @@ bool TempFileFILE::construct(const std::string & dir, const std::string & templa
         // if we are invalid we need to clean up and try again
         this->data->reset();
 
-#ifdef _WIN32
+#if defined(_WIN32)
 
 #ifndef TMP_MAX
 #define TMP_MAX 238328
@@ -1062,7 +1090,7 @@ bool TempFileFILE::construct(const std::string & dir, const std::string & templa
 
                 return false;
             }
-            this->data->fd = _fdopen(fd, "r+");
+            this->data->fd = _fdopen(fd, OPEN_MODE_TO_FILE_MODE(open_mode));
             if (this->data->fd == nullptr) {
                 error = {};
 
@@ -1104,7 +1132,7 @@ bool TempFileFILE::construct(const std::string & dir, const std::string & templa
             goto LOOP_CONTINUE;
         }
         this->data->path = std::move(path);
-        this->data->fd = fdopen(fd, "r+");
+        this->data->fd = fdopen(fd, OPEN_MODE_TO_FILE_MODE(open_mode));
         if (this->data->fd == nullptr) {
             error = {};
 
@@ -1155,7 +1183,7 @@ TempFileFD TempFile::toFD() {
     TempFileFD fd;
     if (!is_valid()) return fd;
     fd.data->path = this->data->path;
-#ifdef _WIN32
+#if defined(_WIN32)
     fd.data->fd = _open_osfhandle(this->data->fd, _O_APPEND);
     if (fd.data->fd == -1) {
         // dont attempt to delete path, it did not exist at time of call and an error has prevented its creation
@@ -1169,25 +1197,29 @@ TempFileFD TempFile::toFD() {
 }
 
 TempFileFILE TempFile::toFILE() {
+    return toFILE(TEMP_FILE_OPEN_MODE_READ);
+}
+
+TempFileFILE TempFile::toFILE(int open_mode) {
     detach();
     TempFileFILE fd;
     if (!is_valid()) return fd;
     fd.data->path = this->data->path;
-#ifdef _WIN32
-    int fd = _open_osfhandle(this->data->fd, _O_APPEND);
-    if (fd == -1) {
+#if defined(_WIN32)
+    int fd_ = _open_osfhandle(this->data->fd, _O_APPEND);
+    if (fd_ == -1) {
         // dont attempt to delete path, it did not exist at time of call and an error has prevented its creation
         fd.data->fatal_path = true;
         reset();
         return fd;
     }
-    fd.data->fd = _fdopen(fd, "r+");
+    fd.data->fd = _fdopen(fd_, OPEN_MODE_TO_FILE_MODE(open_mode));
     if (fd.data->fd == nullptr) {
         // dont attempt to delete path, it did not exist at time of call and an error has prevented its creation
         fd.data->fatal_path = true;
     }
 #else
-    fd.data->fd = fdopen(this->data->fd, "r+");
+    fd.data->fd = fdopen(this->data->fd, OPEN_MODE_TO_FILE_MODE(open_mode));
     if (fd.data->fd == nullptr) {
         // dont attempt to delete path, it did not exist at time of call and an error has prevented its creation
         fd.data->fatal_path = true;
@@ -1202,7 +1234,7 @@ TempFile TempFileFD::toHandle() {
     TempFile fd;
     if (!is_valid()) return fd;
     fd.data->path = this->data->path;
-#ifdef _WIN32
+#if defined(_WIN32)
     fd.data->fd = _get_osfhandle(this->data->fd);
     if (fd.data->fd == INVALID_HANDLE_VALUE) {
         // dont attempt to delete path, it did not exist at time of call and an error has prevented its creation
@@ -1216,14 +1248,18 @@ TempFile TempFileFD::toHandle() {
 }
 
 TempFileFILE TempFileFD::toFILE() {
+    return toFILE(TEMP_FILE_OPEN_MODE_READ);
+}
+
+TempFileFILE TempFileFD::toFILE(int open_mode) {
     detach();
     TempFileFILE fd;
     if (!is_valid()) return fd;
     fd.data->path = this->data->path;
-#ifdef _WIN32
-    fd.data->fd = _fdopen(this->data->fd, "r+");
+#if defined(_WIN32)
+    fd.data->fd = _fdopen(this->data->fd, OPEN_MODE_TO_FILE_MODE(open_mode));
 #else
-    fd.data->fd = fdopen(this->data->fd, "r+");
+    fd.data->fd = fdopen(this->data->fd, OPEN_MODE_TO_FILE_MODE(open_mode));
 #endif
     if (fd.data->fd == nullptr) {
         // dont attempt to delete path, it did not exist at time of call and an error has prevented its creation
@@ -1238,7 +1274,7 @@ TempFileFD TempFileFILE::toFD() {
     TempFileFD fd;
     if (!is_valid()) return fd;
     fd.data->path = this->data->path;
-#ifdef _WIN32
+#if defined(_WIN32)
     fd.data->fd = _fileno(this->data->fd);
 #else
     fd.data->fd = fileno(this->data->fd);
@@ -1256,15 +1292,15 @@ TempFile TempFileFILE::toHandle() {
     TempFile fd;
     if (!is_valid()) return fd;
     fd.data->path = this->data->path;
-#ifdef _WIN32
-    int fd = _fileno(this->data->fd);
-    if (fd == -1) {
+#if defined(_WIN32)
+    int fd_ = _fileno(this->data->fd);
+    if (fd_ == -1) {
         // dont attempt to delete path, it did not exist at time of call and an error has prevented its creation
         fd.data->fatal_path = true;
         reset();
         return fd;
     }
-    fd.data->fd = _get_osfhandle(fd);
+    fd.data->fd = _get_osfhandle(fd_);
     if (fd.data->fd == INVALID_HANDLE_VALUE) {
         // dont attempt to delete path, it did not exist at time of call and an error has prevented its creation
         fd.data->fatal_path = true;
